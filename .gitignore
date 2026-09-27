@@ -10,3 +10,5 @@ e2e/.tmp
 e2e/screens
 api/data
 .dev.vars
+.env.*
+!.env.example
