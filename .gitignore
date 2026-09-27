@@ -1,0 +1,12 @@
+node_modules
+.env
+!.env.example
+*.sqlite*
+dist
+.wrangler
+test-results
+playwright-report
+e2e/.tmp
+e2e/screens
+api/data
+.dev.vars

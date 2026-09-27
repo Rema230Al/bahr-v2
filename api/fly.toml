@@ -1,0 +1,33 @@
+# fly launch --no-deploy --copy-config   (then: fly volumes create bahr_data --size 1)
+app = "bahr-api"
+primary_region = "fra"  # closest Fly region with volumes; check `fly platform regions`
+
+[build]
+
+[env]
+  PORT = "3000"
+  DATABASE_PATH = "/data/bahr.sqlite"
+  CLIENT_IP_HEADER = "fly-client-ip"
+  COOKIE_SECURE = "true"
+
+[mounts]
+  source = "bahr_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  # One machine: SQLite + in-memory rate limits are single-instance by design.
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
