@@ -3,16 +3,21 @@
   "type": "module",
   "private": true,
   "devDependencies": {
-    "@types/bun": "latest"
+    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-socket": "^0.2.11",
+    "@types/bun": "latest",
+    "typescript": "5"
   },
   "dependencies": {
     "@elysiajs/cors": "^1.4.2",
     "elysia": "^1.4.30"
   },
   "scripts": {
-    "dev": "bun --watch --env-file=.env src/index.ts",
+    "dev": "bun --watch --env-file=.env scripts/dev-local.ts",
+    "dev:pg": "bun --watch --env-file=.env src/index.ts",
     "start": "bun src/index.ts",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "admin:set": "bun --env-file=.env scripts/set-admin.ts"
   }
 }

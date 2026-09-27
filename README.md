@@ -5,7 +5,7 @@ A full-stack concept redesign of [bybahr.com](https://bybahr.com). Scrolling is 
 It includes a project-inquiry form, a careers board with applications, and an admin dashboard.
 
 ```
-api/   Elysia + Bun + SQLite (bun:sqlite)   → Docker → Fly.io
+api/   Elysia + Bun + PostgreSQL (Bun.SQL, SQL migrations)   → Docker → Fly.io, database on Neon
 web/   Vite + React + TS, GSAP/ScrollTrigger, Lenis, R3F, Framer Motion → Cloudflare Workers Static Assets
 e2e/   Playwright (starts its own API + web on ports 3100/5180 with a throwaway DB)
 ```
@@ -76,24 +76,41 @@ npx playwright test --project=screens                    # screenshots → e2e/s
 - **Phones**: DPR 1, fewer particles, and CSS rays instead of the ray shader. **Reduced motion**: no Lenis, no pin, no 3D, no cursor; the zones become stacked static sections. If WebGL fails, an error boundary drops the 3D scene and the site keeps working.
 - **Same-origin API**: in dev, Vite proxies `/api`; in prod, the Worker (`web/worker/index.ts`) proxies `/api/*` to Fly. That keeps the session cookie first-party, so `SameSite=Strict` works.
 
-## Deploy (not done yet)
+## Database
 
-**API → Fly.io**
+PostgreSQL. Schema changes are numbered SQL files in `api/migrations/`; every API boot applies the
+ones not yet recorded in `schema_migrations` (inside one transaction, under an advisory lock).
+
+- **Production:** Neon (hosted Postgres). `DATABASE_URL` is a Fly secret — use Neon's *direct* host (not `-pooler`).
+- **Local dev / tests:** no Postgres install needed. `bun run dev` and `bun test` start PGlite — real
+  PostgreSQL compiled to WebAssembly — in-process (dev data persists in `api/data/pglite`).
+  `bun run dev:pg` runs the API against whatever `DATABASE_URL` is in `api/.env` instead.
+- **Admin password:** set once via Fly secrets; rotate with `fly ssh console -C "bun scripts/set-admin.ts"`.
+
+## Deploy
+
+**API → Fly.io** (Frankfurt, one small machine that sleeps when idle)
 ```bash
 cd api
-fly launch --no-deploy --copy-config        # uses fly.toml + Dockerfile
-fly volumes create bahr_data --size 1
-fly secrets set ALLOWED_ORIGIN=https://your-domain ADMIN_EMAIL=… ADMIN_PASSWORD=… PROXY_SECRET=$(openssl rand -hex 32)
-fly deploy
+fly launch --no-deploy --copy-config --name bahr-api
+fly secrets set DATABASE_URL=… SESSION_SECRET=… ADMIN_EMAIL=… ADMIN_PASSWORD=… PROXY_SECRET=… ALLOWED_ORIGIN=https://<live site>
+fly deploy --ha=false
 ```
-The API is designed for a single machine, because SQLite and the in-memory rate limiter live on one instance. To scale out, move to Postgres/LiteFS and Redis.
+The in-memory rate limiter is per machine; with more machines, move it to Redis.
 
-**Web → Cloudflare**
+**Web → Cloudflare Workers (Static Assets)**
 ```bash
 cd web
-# set API_ORIGIN in wrangler.jsonc to your Fly URL
+# wrangler.jsonc → vars.API_ORIGIN = https://bahr-api.fly.dev
 npx wrangler secret put PROXY_SECRET        # same value as on Fly
 bun run build && npx wrangler deploy
+```
+
+**Test the live site**
+```bash
+cd e2e
+LIVE_URL=https://<live site> LIVE_ADMIN_EMAIL=… LIVE_ADMIN_PASSWORD=… npx playwright test
+cd ../api && fly ssh console -C "bun scripts/cleanup-e2e.ts"   # remove the test records
 ```
 
 ## Content

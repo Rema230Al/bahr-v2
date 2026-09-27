@@ -1,0 +1,3 @@
+[test]
+# Starts one in-memory PostgreSQL (PGlite) for the whole test run and applies the migrations.
+preload = ["./test/db.ts"]

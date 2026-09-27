@@ -1,6 +1,7 @@
 node_modules
 data
 test
+scripts/dev-local.ts
 .env
 .env.*
 !.env.example

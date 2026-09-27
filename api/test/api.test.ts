@@ -23,9 +23,9 @@ describe("input validation", () => {
   test("strips unknown fields (no mass assignment) and rejects oversized messages", async () => {
     const { call, db } = await setup();
     expect((await call("POST", "/inquiries", { body: { ...validInquiry, id: 999, created_at: "1999" } })).status).toBe(201);
-    const row = db.query("SELECT id, created_at FROM inquiries").get() as { id: number; created_at: string };
-    expect(row.id).not.toBe(999);
-    expect(row.created_at).not.toBe("1999");
+    const [row] = await db<{ id: number; created_at: Date }[]>`SELECT id, created_at FROM inquiries`;
+    expect(row!.id).not.toBe(999);
+    expect(row!.created_at.getFullYear()).toBeGreaterThan(2000);
     expect((await call("POST", "/inquiries", { body: { ...validInquiry, message: "x".repeat(4001) } })).status).toBe(400);
   });
 
@@ -53,7 +53,8 @@ describe("input validation", () => {
     const { call, db } = await setup();
     const res = await call("POST", "/inquiries", { body: { ...validInquiry, website: "http://spam.example" } });
     expect(res.status).toBe(201);
-    expect((db.query("SELECT COUNT(*) AS n FROM inquiries").get() as { n: number }).n).toBe(0);
+    const [row] = await db<{ n: number }[]>`SELECT COUNT(*)::int AS n FROM inquiries`;
+    expect(row!.n).toBe(0);
   });
 });
 

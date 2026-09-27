@@ -1,74 +1,53 @@
-import { Database } from "bun:sqlite";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { SQL } from "bun";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
-const SCHEMA = /* sql */ `
-PRAGMA foreign_keys = ON;
+export type Db = SQL;
 
-CREATE TABLE IF NOT EXISTS admins (
-  id            INTEGER PRIMARY KEY,
-  email         TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  role          TEXT NOT NULL DEFAULT 'admin' CHECK (role IN ('admin')),
-  created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
+const MIGRATIONS_DIR = join(import.meta.dir, "..", "migrations");
+/** Arbitrary constant: only one process may run migrations at a time. */
+const MIGRATION_LOCK = 7_211_947;
 
-CREATE TABLE IF NOT EXISTS sessions (
-  token_hash TEXT PRIMARY KEY,
-  admin_id   INTEGER NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
-  expires_at INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS inquiries (
-  id         INTEGER PRIMARY KEY,
-  name       TEXT NOT NULL,
-  email      TEXT NOT NULL,
-  company    TEXT,
-  service    TEXT NOT NULL,
-  budget     TEXT NOT NULL,
-  message    TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-
-CREATE TABLE IF NOT EXISTS openings (
-  id                      INTEGER PRIMARY KEY,
-  title                   TEXT NOT NULL,
-  kind                    TEXT NOT NULL CHECK (kind IN ('job','internship')),
-  location                TEXT NOT NULL,
-  description             TEXT NOT NULL,
-  status                  TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed')),
-  accepted_application_id INTEGER,
-  created_at              TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-  closed_at               TEXT
-);
-
-CREATE TABLE IF NOT EXISTS applications (
-  id         INTEGER PRIMARY KEY,
-  opening_id INTEGER NOT NULL REFERENCES openings(id) ON DELETE CASCADE,
-  name       TEXT NOT NULL,
-  email      TEXT NOT NULL,
-  portfolio  TEXT NOT NULL,
-  message    TEXT NOT NULL,
-  status     TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','not_selected')),
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-  UNIQUE (opening_id, email)
-);
-
--- The database itself guarantees at most one accepted applicant per opening.
-CREATE UNIQUE INDEX IF NOT EXISTS one_accepted_per_opening
-  ON applications(opening_id) WHERE status = 'accepted';
-
-CREATE INDEX IF NOT EXISTS applications_by_opening ON applications(opening_id);
-CREATE INDEX IF NOT EXISTS sessions_by_expiry ON sessions(expires_at);
-`;
-
-export function openDb(path: string) {
-  if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-  const db = new Database(path, { create: true, strict: true });
-  db.exec("PRAGMA journal_mode = WAL;");
-  db.exec("PRAGMA busy_timeout = 5000;");
-  db.exec(SCHEMA);
-  return db;
+export function connect(url: string, max = 10): Db {
+  return new SQL(url, { max, idleTimeout: 30, connectionTimeout: 10 });
 }
 
-export type Db = Database;
+/** Waits for the database to accept connections (containers can start before it is reachable). */
+export async function waitForDb(sql: Db, attempts = 20) {
+  for (let i = 1; ; i++) {
+    try {
+      await sql`select 1`;
+      return;
+    } catch (e) {
+      if (i >= attempts) throw e;
+      await Bun.sleep(Math.min(3000, 250 * i));
+    }
+  }
+}
+
+/**
+ * Applies every migrations/NNN_*.sql not yet recorded in schema_migrations, in order, inside one
+ * transaction guarded by an advisory lock — safe to run on every boot and from several machines.
+ */
+export async function migrate(sql: Db) {
+  const files = readdirSync(MIGRATIONS_DIR).filter((f) => /^\d+_.+\.sql$/.test(f)).sort();
+  const applied: string[] = [];
+  await sql.begin(async (tx) => {
+    await tx`SELECT pg_advisory_xact_lock(${MIGRATION_LOCK})`;
+    await tx`CREATE TABLE IF NOT EXISTS schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`;
+    const done = new Set((await tx`SELECT name FROM schema_migrations`).map((r: { name: string }) => r.name));
+    for (const file of files) {
+      if (done.has(file)) continue;
+      await tx.unsafe(readFileSync(join(MIGRATIONS_DIR, file), "utf8"));
+      await tx`INSERT INTO schema_migrations (name) VALUES (${file})`;
+      applied.push(file);
+    }
+  });
+  return applied;
+}
+
+/** Postgres error 23505 = unique_violation (Bun puts the SQLSTATE in `errno`). */
+export const isUniqueViolation = (e: unknown) => {
+  const err = e as { errno?: string; code?: string } | null;
+  return err?.errno === "23505" || err?.code === "23505";
+};

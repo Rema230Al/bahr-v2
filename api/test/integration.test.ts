@@ -1,12 +1,19 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { openDb } from "../src/db";
+import { migrate } from "../src/db";
 import { createRepo } from "../src/repo";
+import { rawQuery } from "./db";
 import { setup, validApplication, validInquiry } from "./helpers";
 
 type AppRow = { id: number; status: string; email: string };
+
+describe("migrations", () => {
+  test("are recorded and safe to run again (every boot runs them)", async () => {
+    const { db } = await setup();
+    expect(await migrate(db)).toEqual([]); // nothing new to apply
+    const rows = await db<{ name: string }[]>`SELECT name FROM schema_migrations ORDER BY name`;
+    expect(rows.map((r) => r.name)).toContain("001_init.sql");
+  });
+});
 
 describe("data is saved", () => {
   test("an inquiry is stored with trimmed, normalised values and shown to the admin", async () => {
@@ -16,7 +23,7 @@ describe("data is saved", () => {
     });
     expect(res.status).toBe(201);
 
-    const row = db.query("SELECT * FROM inquiries").get() as Record<string, string>;
+    const [row] = await db`SELECT * FROM inquiries`;
     expect(row).toMatchObject({ name: "Noura Al-Harbi", email: "noura@example.com", service: "web", budget: "50k-150k" });
 
     const { cookie } = await login();
@@ -24,24 +31,16 @@ describe("data is saved", () => {
     expect(list).toHaveLength(1);
   });
 
-  test("openings and applications survive a restart (file-backed database)", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "bahr-"));
-    const path = join(dir, "bahr.sqlite");
-    try {
-      const db1 = openDb(path);
-      const repo1 = createRepo(db1);
-      const o = repo1.createOpening({ title: "Motion Designer", kind: "job", location: "Remote", description: "Make depth move beautifully." });
-      repo1.apply(o.id, { name: "Lama", email: "lama@example.com", portfolio: "https://lama.work", message: "Hello Bahr team!" });
-      db1.close();
+  test("openings and applications are committed to PostgreSQL (visible outside the app's connection)", async () => {
+    const { db } = await setup();
+    const repo1 = createRepo(db);
+    const o = await repo1.createOpening({ title: "Motion Designer", kind: "job", location: "Remote", description: "Make depth move beautifully." });
+    await repo1.apply(o.id, { name: "Lama", email: "lama@example.com", portfolio: "https://lama.work", message: "Hello Bahr team!" });
 
-      const db2 = openDb(path);
-      const repo2 = createRepo(db2);
-      expect(repo2.getOpening(o.id)?.title).toBe("Motion Designer");
-      expect(repo2.listApplications(o.id)).toHaveLength(1);
-      db2.close();
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    const openings = await rawQuery<{ title: string }>("SELECT title FROM openings");
+    const applications = await rawQuery<{ email: string }>("SELECT email FROM applications");
+    expect(openings.map((r) => r.title)).toEqual(["Motion Designer"]);
+    expect(applications.map((r) => r.email)).toEqual(["lama@example.com"]);
   });
 });
 
@@ -61,9 +60,10 @@ describe("only one applicant can be accepted", () => {
     expect(accept.status).toBe(200);
     expect(((await accept.json()) as { status: string }).status).toBe("closed");
 
-    const rows = db.query("SELECT id, status, email FROM applications ORDER BY id").all() as AppRow[];
+    const rows = await db<AppRow[]>`SELECT id, status, email FROM applications ORDER BY id`;
     expect(rows.map((r) => r.status)).toEqual(["not_selected", "accepted", "not_selected"]);
-    expect(db.query("SELECT status, accepted_application_id AS a FROM openings").get()).toEqual({ status: "closed", a: ids[1]! });
+    const [opening] = await db`SELECT status, accepted_application_id AS a FROM openings`;
+    expect(opening).toEqual({ status: "closed", a: ids[1]! });
 
     // A second accept fails, and the opening takes no new applications.
     const second = await call("POST", `/admin/openings/${o.id}/applications/${ids[0]}/accept`, { cookie });
@@ -85,17 +85,19 @@ describe("only one applicant can be accepted", () => {
       call("POST", `/admin/openings/${o.id}/applications/${b.id}/accept`, { cookie }),
     ]);
     expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
-    expect((db.query("SELECT COUNT(*) AS n FROM applications WHERE status = 'accepted'").get() as { n: number }).n).toBe(1);
+    const [row] = await db<{ n: number }[]>`SELECT COUNT(*)::int AS n FROM applications WHERE status = 'accepted'`;
+    expect(row!.n).toBe(1);
   });
 
   test("the database itself refuses a second accepted row", async () => {
     const { db } = await setup();
     const repo = createRepo(db);
-    const o = repo.createOpening({ title: "Engineer", kind: "job", location: "Jeddah", description: "Build the backend of depth." });
-    const a = repo.apply(o.id, { name: "A", email: "a@x.com", portfolio: "https://a.x", message: "Hello there!" });
-    const b = repo.apply(o.id, { name: "B", email: "b@x.com", portfolio: "https://b.x", message: "Hello there!" });
-    db.query("UPDATE applications SET status = 'accepted' WHERE id = ?").run(a);
-    expect(() => db.query("UPDATE applications SET status = 'accepted' WHERE id = ?").run(b)).toThrow(/UNIQUE/);
+    const o = await repo.createOpening({ title: "Engineer", kind: "job", location: "Jeddah", description: "Build the backend of depth." });
+    const a = await repo.apply(o.id, { name: "A", email: "a@x.com", portfolio: "https://a.x", message: "Hello there!" });
+    const b = await repo.apply(o.id, { name: "B", email: "b@x.com", portfolio: "https://b.x", message: "Hello there!" });
+    await db`UPDATE applications SET status = 'accepted' WHERE id = ${a}`;
+    const err = await db`UPDATE applications SET status = 'accepted' WHERE id = ${b}`.then(() => null, (e: { errno?: string }) => e);
+    expect(err?.errno).toBe("23505"); // unique_violation on one_accepted_per_opening
   });
 
   test("an applicant from a different opening cannot be accepted", async () => {

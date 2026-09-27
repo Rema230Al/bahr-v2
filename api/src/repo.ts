@@ -1,4 +1,4 @@
-import type { Db } from "./db";
+import { isUniqueViolation, type Db } from "./db";
 import { acceptApplicant, canApply, OpeningClosedError, type Opening, type OpeningKind } from "./domain/opening";
 
 type OpeningRow = {
@@ -9,8 +9,8 @@ type OpeningRow = {
   description: string;
   status: "open" | "closed";
   accepted_application_id: number | null;
-  created_at: string;
-  closed_at: string | null;
+  created_at: Date;
+  closed_at: Date | null;
 };
 
 const toOpening = (r: OpeningRow): Opening => ({
@@ -21,106 +21,98 @@ const toOpening = (r: OpeningRow): Opening => ({
   description: r.description,
   status: r.status,
   acceptedApplicationId: r.accepted_application_id,
-  createdAt: r.created_at,
-  closedAt: r.closed_at,
+  createdAt: new Date(r.created_at).toISOString(),
+  closedAt: r.closed_at ? new Date(r.closed_at).toISOString() : null,
 });
 
 export class NotFoundError extends Error {}
 export class DuplicateApplicationError extends Error {}
 
-const isUniqueViolation = (e: unknown) =>
-  e instanceof Error && /UNIQUE constraint failed/i.test(e.message);
-
-export function createRepo(db: Db) {
-  const q = {
-    insertInquiry: db.query(
-      `INSERT INTO inquiries (name, email, company, service, budget, message)
-       VALUES ($name, $email, $company, $service, $budget, $message) RETURNING id`,
-    ),
-    listInquiries: db.query(`SELECT * FROM inquiries ORDER BY id DESC LIMIT 500`),
-    insertOpening: db.query(
-      `INSERT INTO openings (title, kind, location, description)
-       VALUES ($title, $kind, $location, $description) RETURNING *`,
-    ),
-    getOpening: db.query(`SELECT * FROM openings WHERE id = ?`),
-    listOpenings: db.query(`SELECT * FROM openings ORDER BY status = 'closed', id DESC`),
-    listOpeningsWithCounts: db.query(
-      `SELECT o.*, (SELECT COUNT(*) FROM applications a WHERE a.opening_id = o.id) AS applicants
-       FROM openings o ORDER BY o.status = 'closed', o.id DESC`,
-    ),
-    closeOpening: db.query(
-      `UPDATE openings SET status = 'closed', accepted_application_id = $applicationId, closed_at = $closedAt
-       WHERE id = $id AND status = 'open'`,
-    ),
-    insertApplication: db.query(
-      `INSERT INTO applications (opening_id, name, email, portfolio, message)
-       VALUES ($openingId, $name, $email, $portfolio, $message) RETURNING id`,
-    ),
-    getApplication: db.query(`SELECT * FROM applications WHERE id = ? AND opening_id = ?`),
-    listApplications: db.query(`SELECT * FROM applications WHERE opening_id = ? ORDER BY id ASC`),
-    acceptApplication: db.query(`UPDATE applications SET status = 'accepted' WHERE id = ? AND status = 'pending'`),
-    declineOthers: db.query(
-      `UPDATE applications SET status = 'not_selected' WHERE opening_id = ? AND id != ? AND status = 'pending'`,
-    ),
-  };
-
-  const getOpening = (id: number) => {
-    const row = q.getOpening.get(id) as OpeningRow | null;
+export function createRepo(sql: Db) {
+  const getOpening = async (id: number) => {
+    const [row] = await sql<OpeningRow[]>`SELECT * FROM openings WHERE id = ${id}`;
     return row ? toOpening(row) : null;
   };
 
   return {
-    createInquiry(i: { name: string; email: string; company: string | null; service: string; budget: string; message: string }) {
-      return (q.insertInquiry.get(i) as { id: number }).id;
+    async createInquiry(i: { name: string; email: string; company: string | null; service: string; budget: string; message: string }) {
+      const [row] = await sql<{ id: number }[]>`
+        INSERT INTO inquiries (name, email, company, service, budget, message)
+        VALUES (${i.name}, ${i.email}, ${i.company}, ${i.service}, ${i.budget}, ${i.message})
+        RETURNING id`;
+      return row!.id;
     },
-    listInquiries: () => q.listInquiries.all(),
+    listInquiries: () => sql`SELECT * FROM inquiries ORDER BY id DESC LIMIT 500`,
 
-    createOpening(o: { title: string; kind: OpeningKind; location: string; description: string }) {
-      return toOpening(q.insertOpening.get(o) as OpeningRow);
+    async createOpening(o: { title: string; kind: OpeningKind; location: string; description: string }) {
+      const [row] = await sql<OpeningRow[]>`
+        INSERT INTO openings (title, kind, location, description)
+        VALUES (${o.title}, ${o.kind}, ${o.location}, ${o.description})
+        RETURNING *`;
+      return toOpening(row!);
     },
     getOpening,
-    listOpenings: () => (q.listOpenings.all() as OpeningRow[]).map(toOpening),
-    listOpeningsWithCounts: () =>
-      (q.listOpeningsWithCounts.all() as (OpeningRow & { applicants: number })[]).map((r) => ({
-        ...toOpening(r),
-        applicants: r.applicants,
-      })),
+    async listOpenings() {
+      const rows = await sql<OpeningRow[]>`SELECT * FROM openings ORDER BY status = 'closed', id DESC`;
+      return rows.map(toOpening);
+    },
+    async listOpeningsWithCounts() {
+      const rows = await sql<(OpeningRow & { applicants: number })[]>`
+        SELECT o.*, (SELECT COUNT(*)::int FROM applications a WHERE a.opening_id = o.id) AS applicants
+        FROM openings o ORDER BY o.status = 'closed', o.id DESC`;
+      return rows.map((r) => ({ ...toOpening(r), applicants: r.applicants }));
+    },
 
-    apply(openingId: number, a: { name: string; email: string; portfolio: string; message: string }) {
-      const opening = getOpening(openingId);
+    /** Inserts only while the opening is still open — checked in the same statement, so no race with an accept. */
+    async apply(openingId: number, a: { name: string; email: string; portfolio: string; message: string }) {
+      const opening = await getOpening(openingId);
       if (!opening) throw new NotFoundError("Opening not found");
       if (!canApply(opening)) throw new OpeningClosedError();
       try {
-        return (q.insertApplication.get({ openingId, ...a }) as { id: number }).id;
+        const [row] = await sql<{ id: number }[]>`
+          INSERT INTO applications (opening_id, name, email, portfolio, message)
+          SELECT ${openingId}, ${a.name}, ${a.email}, ${a.portfolio}, ${a.message}
+          WHERE EXISTS (SELECT 1 FROM openings WHERE id = ${openingId} AND status = 'open')
+          RETURNING id`;
+        if (!row) throw new OpeningClosedError();
+        return row.id;
       } catch (e) {
         if (isUniqueViolation(e)) throw new DuplicateApplicationError("Already applied");
         throw e;
       }
     },
-    listApplications: (openingId: number) => q.listApplications.all(openingId),
+    listApplications: (openingId: number) =>
+      sql`SELECT * FROM applications WHERE opening_id = ${openingId} ORDER BY id ASC`,
 
     /**
-     * Accepts one applicant and closes the opening, atomically. An IMMEDIATE transaction takes the
-     * write lock up front so two concurrent accepts serialize; the partial unique index is the backstop.
+     * Accepts one applicant and closes the opening, atomically. SELECT … FOR UPDATE locks the
+     * opening row, so two concurrent accepts run one after the other and the second sees it closed.
+     * The partial unique index (one accepted row per opening) is the final backstop.
      */
-    accept: db
-      .transaction((openingId: number, applicationId: number): Opening => {
-        const opening = getOpening(openingId);
-        if (!opening) throw new NotFoundError("Opening not found");
-        const closed = acceptApplicant(opening, applicationId); // throws if already closed
-        if (!q.getApplication.get(applicationId, openingId)) throw new NotFoundError("Applicant not found");
+    accept(openingId: number, applicationId: number): Promise<Opening> {
+      return sql.begin(async (tx) => {
+        const [row] = await tx<OpeningRow[]>`SELECT * FROM openings WHERE id = ${openingId} FOR UPDATE`;
+        if (!row) throw new NotFoundError("Opening not found");
+        const closed = acceptApplicant(toOpening(row), applicationId); // throws if already closed
+        const [app] = await tx<{ status: string }[]>`
+          SELECT status FROM applications WHERE id = ${applicationId} AND opening_id = ${openingId} FOR UPDATE`;
+        if (!app) throw new NotFoundError("Applicant not found");
+        if (app.status !== "pending") throw new OpeningClosedError();
         try {
-          if (q.acceptApplication.run(applicationId).changes !== 1) throw new OpeningClosedError();
+          await tx`UPDATE applications SET status = 'accepted' WHERE id = ${applicationId}`;
         } catch (e) {
           if (isUniqueViolation(e)) throw new OpeningClosedError();
           throw e;
         }
-        q.declineOthers.run(openingId, applicationId);
-        const res = q.closeOpening.run({ id: openingId, applicationId, closedAt: closed.closedAt });
-        if (res.changes !== 1) throw new OpeningClosedError();
+        await tx`
+          UPDATE applications SET status = 'not_selected'
+          WHERE opening_id = ${openingId} AND id <> ${applicationId} AND status = 'pending'`;
+        await tx`
+          UPDATE openings SET status = 'closed', accepted_application_id = ${applicationId}, closed_at = ${closed.closedAt}
+          WHERE id = ${openingId}`;
         return closed;
-      })
-      .immediate,
+      });
+    },
   };
 }
 

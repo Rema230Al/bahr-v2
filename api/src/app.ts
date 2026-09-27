@@ -31,7 +31,7 @@ const invalid = (fields: Record<string, string>) => new HttpError(400, { error: 
 
 export function createApp(config: Config, db: Db) {
   const repo = createRepo(db);
-  const sessions = createSessions(db, config.sessionTtlHours);
+  const sessions = createSessions(db, config.sessionSecret, config.sessionTtlHours);
   const admins = createAdmins(db);
   const formLimiter = createRateLimiter(config.rateLimit.formMax, config.rateLimit.formWindowMs);
   const loginLimiter = createRateLimiter(config.rateLimit.loginMax, config.rateLimit.loginWindowMs);
@@ -62,13 +62,13 @@ export function createApp(config: Config, db: Db) {
 
   const publicRoutes = new Elysia()
     .get("/health", () => ({ ok: true }))
-    .get("/openings", () =>
-      repo.listOpenings().map(({ acceptedApplicationId: _hidden, ...o }) => o),
+    .get("/openings", async () =>
+      (await repo.listOpenings()).map(({ acceptedApplicationId: _hidden, ...o }) => o),
     )
     .get(
       "/openings/:id",
-      ({ params }) => {
-        const o = repo.getOpening(params.id);
+      async ({ params }) => {
+        const o = await repo.getOpening(params.id);
         if (!o) throw new HttpError(404, { error: "not_found" });
         const { acceptedApplicationId: _hidden, ...rest } = o;
         return rest;
@@ -77,11 +77,11 @@ export function createApp(config: Config, db: Db) {
     )
     .post(
       "/inquiries",
-      ({ body, set }) => {
+      async ({ body, set }) => {
         if (body.website) return fakeSuccess(set);
         const { value, errors } = clean(body, { name: 2, message: 10 });
         if (errors) throw invalid(errors);
-        const id = repo.createInquiry({ ...value, company: value.company || null });
+        const id = await repo.createInquiry({ ...value, company: value.company || null });
         set.status = 201;
         return { ok: true, id };
       },
@@ -95,12 +95,12 @@ export function createApp(config: Config, db: Db) {
     )
     .post(
       "/openings/:id/applications",
-      ({ body, params, set }) => {
+      async ({ body, params, set }) => {
         if (body.website) return fakeSuccess(set);
         const { value, errors } = clean(body, { name: 2, message: 10 });
         if (errors) throw invalid(errors);
         const { website: _hp, ...application } = value;
-        const id = repo.apply(params.id, application);
+        const id = await repo.apply(params.id, application);
         set.status = 201;
         return { ok: true, id };
       },
@@ -122,7 +122,7 @@ export function createApp(config: Config, db: Db) {
         const admin = await admins.authenticate(body.email, body.password);
         if (!admin) throw new HttpError(401, { error: "invalid_credentials" });
         cookie[cookieName]!.set({
-          value: sessions.create(admin.id),
+          value: await sessions.create(admin.id),
           httpOnly: true,
           secure: config.cookieSecure,
           sameSite: "strict",
@@ -136,18 +136,18 @@ export function createApp(config: Config, db: Db) {
         transform: ({ request, server }) => loginLimiter.hit(`login:${clientIp(request, server)}`),
       },
     )
-    .post("/logout", ({ cookie, request }) => {
+    .post("/logout", async ({ cookie, request }) => {
       assertSameOrigin(request);
       const c = cookie[cookieName]!;
-      sessions.destroy(c.value as string | undefined);
+      await sessions.destroy(c.value as string | undefined);
       c.set({ value: "", httpOnly: true, secure: config.cookieSecure, sameSite: "strict", path: "/", maxAge: 0 });
       return { ok: true };
     });
 
   /** Every route in here passes the server-side admin check first — no exceptions. */
   const adminRoutes = new Elysia({ prefix: "/admin" })
-    .resolve(({ cookie, request }) => {
-      const admin = sessions.verify(cookie[cookieName]?.value as string | undefined);
+    .resolve(async ({ cookie, request }) => {
+      const admin = await sessions.verify(cookie[cookieName]?.value as string | undefined);
       if (!admin) throw new HttpError(401, { error: "unauthorized" });
       if (admin.role !== "admin") throw new HttpError(403, { error: "forbidden" });
       if (request.method !== "GET") assertSameOrigin(request);
@@ -158,18 +158,18 @@ export function createApp(config: Config, db: Db) {
     .get("/openings", () => repo.listOpeningsWithCounts())
     .post(
       "/openings",
-      ({ body, set }) => {
+      async ({ body, set }) => {
         const { value, errors } = clean(body, { title: 3, location: 2, description: 20 });
         if (errors) throw invalid(errors);
         set.status = 201;
-        return repo.createOpening(value);
+        return await repo.createOpening(value);
       },
       { body: openingBody, transform: ({ body }) => trimStrings(body) },
     )
     .get(
       "/openings/:id/applications",
-      ({ params }) => {
-        if (!repo.getOpening(params.id)) throw new HttpError(404, { error: "not_found" });
+      async ({ params }) => {
+        if (!(await repo.getOpening(params.id))) throw new HttpError(404, { error: "not_found" });
         return repo.listApplications(params.id);
       },
       { params: idParam },

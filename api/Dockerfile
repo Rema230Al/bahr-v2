@@ -10,10 +10,11 @@ ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY src ./src
-# SQLite lives on a Fly volume mounted at /data; run as the unprivileged bun user.
-RUN mkdir -p /data && chown bun:bun /data
+COPY migrations ./migrations
+COPY scripts/set-admin.ts scripts/cleanup-e2e.ts ./scripts/
+# Data lives in PostgreSQL (Neon), not on this machine — nothing to persist here. Run unprivileged.
 USER bun
-ENV DATABASE_PATH=/data/bahr.sqlite PORT=3000
+ENV PORT=3000
 EXPOSE 3000
 HEALTHCHECK CMD wget -qO- http://127.0.0.1:3000/health || exit 1
 CMD ["bun", "src/index.ts"]

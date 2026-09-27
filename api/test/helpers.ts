@@ -1,5 +1,5 @@
 import { loadConfig, type Config } from "../src/config";
-import { openDb } from "../src/db";
+import { resetDb, TEST_DATABASE_URL, testDb } from "./db";
 import { createApp } from "../src/app";
 import { createAdmins } from "../src/security/admins";
 
@@ -12,11 +12,17 @@ export const freshIp = () => `10.0.${Math.floor(++ipCounter / 250)}.${ipCounter 
 
 export async function setup(overrides: Partial<Config> = {}) {
   const config: Config = {
-    ...loadConfig({ ALLOWED_ORIGIN: ORIGIN, COOKIE_SECURE: "false", CLIENT_IP_HEADER: "x-test-ip" }),
-    databasePath: ":memory:",
+    ...loadConfig({
+      ALLOWED_ORIGIN: ORIGIN,
+      COOKIE_SECURE: "false",
+      CLIENT_IP_HEADER: "x-test-ip",
+      DATABASE_URL: TEST_DATABASE_URL,
+      SESSION_SECRET: "test-session-secret-that-is-long-enough-123",
+    }),
     ...overrides,
   };
-  const db = openDb(":memory:");
+  await resetDb();
+  const db = testDb();
   await createAdmins(db).create(ADMIN.email, ADMIN.password);
   const app = createApp(config, db);
   const ip = freshIp();

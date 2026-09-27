@@ -1,7 +1,10 @@
 /** All runtime configuration comes from environment variables — nothing secret lives in code. */
 export type Config = {
   port: number;
-  databasePath: string;
+  databaseUrl: string;
+  databasePoolMax: number;
+  /** Key for HMAC-ing session tokens before they are stored. */
+  sessionSecret: string;
   allowedOrigin: string;
   cookieSecure: boolean;
   sessionTtlHours: number;
@@ -30,6 +33,13 @@ export function loadConfig(env: Env = process.env): Config {
     throw new Error("ALLOWED_ORIGIN must be a full origin such as https://bybahr.com");
   }
 
+  const databaseUrl = env.DATABASE_URL?.trim();
+  if (!databaseUrl || !/^postgres(ql)?:\/\//.test(databaseUrl)) {
+    throw new Error("DATABASE_URL is required (postgres://user:pass@host/db)");
+  }
+  const sessionSecret = env.SESSION_SECRET ?? "";
+  if (sessionSecret.length < 32) throw new Error("SESSION_SECRET is required (32+ random characters)");
+
   const adminPassword = env.ADMIN_PASSWORD || null;
   if (adminPassword && adminPassword.length < 12) {
     throw new Error("ADMIN_PASSWORD must be at least 12 characters");
@@ -37,7 +47,9 @@ export function loadConfig(env: Env = process.env): Config {
 
   return {
     port: int(env.PORT, 3000),
-    databasePath: env.DATABASE_PATH || "./data/bahr.sqlite",
+    databaseUrl,
+    databasePoolMax: int(env.DATABASE_POOL_MAX, 10),
+    sessionSecret,
     allowedOrigin: allowedOrigin.replace(/\/$/, ""),
     cookieSecure: env.COOKIE_SECURE !== "false",
     sessionTtlHours: int(env.SESSION_TTL_HOURS, 8),
