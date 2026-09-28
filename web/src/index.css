@@ -185,8 +185,8 @@ html.lenis body {
     background-size: 5px 5px;
     background-repeat: no-repeat;
   }
-  [dir="rtl"] select.field {
-    background-position: 20px 55%, 15px 55%;
+  select.field:dir(rtl) {
+    background-position: 15px 55%, 20px 55%;
   }
   select.field option {
     color: #242423;

@@ -25,10 +25,10 @@ export default defineConfig({
   reporter: [["list"]],
   use: { baseURL: WEB_URL, trace: "retain-on-failure" },
   projects: LIVE_URL
-    ? [{ name: "live", testMatch: /(flows|leads)\.spec\.ts/, use: { ...devices["Desktop Chrome"] } }]
+    ? [{ name: "live", testMatch: /(flows|leads|date-filter)\.spec\.ts/, use: { ...devices["Desktop Chrome"] } }]
     : [
-    { name: "e2e", testMatch: /(flows|leads)\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
-    { name: "e2e-mobile", testMatch: /flows\.spec\.ts/, use: { ...devices["Pixel 7"], viewport: { width: 390, height: 844 } } },
+    { name: "e2e", testMatch: /(flows|leads|date-filter)\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
+    { name: "e2e-mobile", testMatch: /(flows|date-filter)\.spec\.ts/, use: { ...devices["Pixel 7"], viewport: { width: 390, height: 844 } } },
     { name: "screens", testMatch: /screens\.spec\.ts/ },
   ],
   webServer: LIVE_URL ? undefined : [
@@ -44,6 +44,8 @@ export default defineConfig({
         COOKIE_SECURE: "false",
         ADMIN_EMAIL: ADMIN.email,
         ADMIN_PASSWORD: ADMIN.password,
+        // Same calendar as the browser, so presets like "Today" mean the same day on both sides.
+        ADMIN_TIME_ZONE: Intl.DateTimeFormat().resolvedOptions().timeZone,
         // Both device projects share one IP; limiter behaviour itself is covered by the API tests.
         RATE_LIMIT_FORM_MAX: "50",
         RATE_LIMIT_LOGIN_MAX: "50",

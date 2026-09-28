@@ -35,7 +35,7 @@ All tokens live in `web/src/index.css` (`@theme` + `:root` / `[data-theme="dark"
 - Arabic: never letter-space or uppercase; every string needs EN + AR; use logical props (`ms-`, `inset-inline`, `text-start`) so RTL works.
 
 ## Admin pages
-Same brand (tokens, fonts, components) but calm and functional. No scroll-driven/GSAP animations or heavy effects. Only subtle Framer Motion: fade/slide-in of ~16px, `layoutId` tab indicator, `AnimatePresence` for swaps (see `pages/Admin.tsx`). `SeaWaves` as a slow background is the only ambient motion.
+Same brand (tokens, fonts, components) but calm and functional. No scroll-driven/GSAP animations or heavy effects. Only subtle Framer Motion: fade/slide-in of ~16px, `layoutId` tab indicator, `AnimatePresence` for swaps (see `pages/Admin.tsx`). `SeaWaves` appears only on the sign-in screen; the dashboard has no ambient motion or wave background.
 
 ## Working rules
 - Simplest correct solution; reuse existing code, components, and tokens before adding anything new.

@@ -34,7 +34,7 @@ bun run dev                   # proxies /api → localhost:3000
 ## Tests
 
 ```bash
-cd api && bun test            # 66 tests: unit + API + integration
+cd api && bun test            # 72 tests: unit + API + integration
 cd e2e && npm install && npx playwright install chromium
 npx playwright test --project=e2e --project=e2e-mobile   # E2E flows, desktop + 390px phone
 npx playwright test --project=screens                    # screenshots → e2e/screens/
@@ -47,7 +47,9 @@ npx playwright test --project=screens                    # screenshots → e2e/s
 | Integration | `api/test/integration.test.ts` | Data is saved and normalized; data survives a restart; accepting closes the opening and marks the others "not selected"; two simultaneous accepts, only one wins; the DB rejects a second accepted row; cross-opening accept is refused |
 | API | `api/test/leads.test.ts` | Each inquiry becomes a lead in New (existing ones too, via migration 002); stage moves are logged; Lost needs a reason; deal value / owner / follow-up date validation; notes; 404s; CSRF |
 | E2E | `e2e/tests/flows.spec.ts` | Send an inquiry → apply (and a duplicate is refused) → admin logs in (a wrong password fails first), sees the inquiry, accepts → the public board shows "Filled" |
+| API | `api/test/date-range.test.ts` | `?from`/`?to` on inquiries, leads and applications: inclusive days in `ADMIN_TIME_ZONE` (checked one minute either side of each edge), open-ended ranges, impossible dates and "to" before "from" refused, admin-only |
 | E2E | `e2e/tests/leads.spec.ts` | Admin drags a lead from New to Won; it stays there after a reload and the timeline records the move |
+| E2E | `e2e/tests/date-filter.spec.ts` | Admin picks a past range (today's inquiry disappears, Leads counts drop to 0), "to" before "from" is flagged, the range is kept across tabs, "Today" brings it back, Clear resets (desktop + phone) |
 
 ## Security
 

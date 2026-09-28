@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { api, ApiError, type AdminOpening, type Application, type Inquiry } from "../lib/api";
+import { api, ApiError, type AdminOpening, type Application, type DateRange, type Inquiry } from "../lib/api";
 import { TextArea, TextField, SelectField } from "../components/ui/Field";
 import MagneticButton from "../components/ui/Magnetic";
 import SeaWaves, { SEA_PADDING } from "../components/ui/SeaWaves";
 import Leads from "./AdminLeads";
+import DateRangeFilter from "./AdminDateRange";
+import { ALL_TIME, appliedRange } from "../lib/dateRange";
 
 /**
  * Admin dashboard. The UI hides itself without a session, but the real gate is the server:
@@ -19,8 +21,9 @@ export default function Admin() {
   }, []);
 
   return (
-    <div className={`relative min-h-[100svh] px-[var(--gutter)] pt-28 md:pt-36 ${SEA_PADDING}`} dir="ltr" lang="en">
-      <SeaWaves />
+    // The sea is only on the sign-in screen; the dashboard itself stays still and calm.
+    <div className={`relative min-h-[100svh] px-[var(--gutter)] pt-28 md:pt-36 ${me ? "pb-16" : SEA_PADDING}`} dir="ltr" lang="en">
+      {!me && <SeaWaves />}
       <div className="relative">
         {me === undefined && <p className="label">Checking session…</p>}
         {me === null && <Login onDone={setMe} />}
@@ -95,6 +98,9 @@ const TABS: [Tab, string][] = [
 
 function Dashboard({ email, onLogout }: { email: string; onLogout: () => void }) {
   const [tab, setTab] = useState<Tab>("inquiries");
+  // Lives here, above the tabs, so the chosen range is kept when switching tabs.
+  const [dates, setDates] = useState(ALL_TIME);
+  const range = appliedRange(dates);
 
   const logout = async () => {
     await api.logout().catch(() => undefined);
@@ -131,20 +137,34 @@ function Dashboard({ email, onLogout }: { email: string; onLogout: () => void })
         ))}
       </div>
 
-      <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="mt-10">
-        {tab === "leads" ? <Leads /> : tab === "inquiries" ? <Inquiries /> : <Openings />}
+      <div className="mt-8">
+        <DateRangeFilter value={dates} onChange={setDates} />
+      </div>
+
+      <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="mt-8">
+        {tab === "leads" ? <Leads range={range} /> : tab === "inquiries" ? <Inquiries range={range} /> : <Openings range={range} />}
       </div>
     </div>
   );
 }
 
-function Inquiries() {
+const filtered = (r: DateRange) => !!(r.from || r.to);
+
+function Inquiries({ range }: { range: DateRange }) {
   const [items, setItems] = useState<Inquiry[] | null>(null);
+  const { from, to } = range;
   useEffect(() => {
-    api.inquiries().then(setItems, () => setItems([]));
-  }, []);
+    let live = true; // ignore a slower response for a range the admin has already changed
+    api.inquiries({ from, to }).then(
+      (r) => live && setItems(r),
+      () => live && setItems([]),
+    );
+    return () => {
+      live = false;
+    };
+  }, [from, to]);
   if (!items) return <p className="label">Loading…</p>;
-  if (!items.length) return <p className="opacity-70">No inquiries yet.</p>;
+  if (!items.length) return <p className="opacity-70">{filtered(range) ? "No inquiries in this date range." : "No inquiries yet."}</p>;
   return (
     <ul className="grid gap-4" aria-label="Inquiries">
       {items.map((q) => (
@@ -168,7 +188,7 @@ function Inquiries() {
   );
 }
 
-function Openings() {
+function Openings({ range }: { range: DateRange }) {
   const [items, setItems] = useState<AdminOpening[] | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const reload = useCallback(() => api.adminOpenings().then(setItems, () => setItems([])), []);
@@ -214,7 +234,7 @@ function Openings() {
       <AnimatePresence mode="wait">
         {current ? (
           <motion.div key={current.id} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}>
-            <Applicants opening={current} onAccepted={reload} />
+            <Applicants opening={current} onAccepted={reload} range={range} />
           </motion.div>
         ) : (
           <p className="opacity-60">Select an opening to see its applicants.</p>
@@ -264,12 +284,13 @@ function NewOpening({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-function Applicants({ opening, onAccepted }: { opening: AdminOpening; onAccepted: () => void }) {
+function Applicants({ opening, onAccepted, range }: { opening: AdminOpening; onAccepted: () => void; range: DateRange }) {
   const [apps, setApps] = useState<Application[] | null>(null);
   const [confirming, setConfirming] = useState<number | null>(null);
   const [error, setError] = useState("");
 
-  const load = useCallback(() => api.applications(opening.id).then(setApps, () => setApps([])), [opening.id]);
+  const { from, to } = range;
+  const load = useCallback(() => api.applications(opening.id, { from, to }).then(setApps, () => setApps([])), [opening.id, from, to]);
   useEffect(() => {
     load();
   }, [load, opening.status]);
@@ -298,7 +319,7 @@ function Applicants({ opening, onAccepted }: { opening: AdminOpening; onAccepted
         </p>
       )}
       {!apps && <p className="label mt-6">Loading…</p>}
-      {apps?.length === 0 && <p className="mt-6 opacity-70">No applicants yet.</p>}
+      {apps?.length === 0 && <p className="mt-6 opacity-70">{filtered(range) ? "No applicants in this date range." : "No applicants yet."}</p>}
       <ul className="mt-6 grid gap-4" aria-label="Applicants">
         {apps?.map((a) => (
           <li key={a.id} className={`border p-5 ${a.status === "accepted" ? "border-accent" : "border-line"}`} data-testid="applicant">

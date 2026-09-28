@@ -14,6 +14,8 @@ export type Config = {
   proxySecret: string | null;
   adminEmail: string | null;
   adminPassword: string | null;
+  /** IANA zone whose calendar days the admin date filter uses (e.g. "Asia/Riyadh"). */
+  timeZone: string;
   rateLimit: { formMax: number; formWindowMs: number; loginMax: number; loginWindowMs: number };
 };
 
@@ -45,6 +47,13 @@ export function loadConfig(env: Env = process.env): Config {
     throw new Error("ADMIN_PASSWORD must be at least 12 characters");
   }
 
+  const timeZone = env.ADMIN_TIME_ZONE?.trim() || "Asia/Riyadh";
+  try {
+    new Intl.DateTimeFormat("en", { timeZone });
+  } catch {
+    throw new Error(`ADMIN_TIME_ZONE "${timeZone}" is not a valid IANA time zone`);
+  }
+
   return {
     port: int(env.PORT, 3000),
     databaseUrl,
@@ -57,6 +66,7 @@ export function loadConfig(env: Env = process.env): Config {
     proxySecret: env.PROXY_SECRET || null,
     adminEmail: env.ADMIN_EMAIL?.trim().toLowerCase() || null,
     adminPassword,
+    timeZone,
     rateLimit: {
       formMax: int(env.RATE_LIMIT_FORM_MAX, 5),
       formWindowMs: int(env.RATE_LIMIT_FORM_WINDOW_MS, 10 * 60_000),

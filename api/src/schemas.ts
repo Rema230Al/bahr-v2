@@ -1,5 +1,5 @@
 import { t } from "elysia";
-import { STAGES } from "./domain/lead";
+import { isIsoDate, STAGES } from "./domain/lead";
 
 /** Hidden field real people never see or fill. Bots that do get a fake success. */
 const honeypot = t.Optional(t.String({ maxLength: 500 }));
@@ -85,3 +85,20 @@ export const leadPatchBody = t.Object(
 );
 
 export const noteBody = t.Object({ body: t.String({ minLength: 1, maxLength: 2000 }) }, { additionalProperties: false });
+
+const DATE = "^[0-9]{4}-[0-9]{2}-[0-9]{2}$";
+
+/** ?from=YYYY-MM-DD&to=YYYY-MM-DD — both optional, both inclusive calendar days. */
+export const dateRangeQuery = t.Object(
+  { from: t.Optional(t.String({ pattern: DATE })), to: t.Optional(t.String({ pattern: DATE })) },
+  { additionalProperties: false },
+);
+
+/** Rejects impossible dates (2026-02-31) and a "to" before "from". */
+export function checkRange(q: { from?: string; to?: string }) {
+  const errors: Record<string, string> = {};
+  if (q.from && !isIsoDate(q.from)) errors.from = "Enter a valid date";
+  if (q.to && !isIsoDate(q.to)) errors.to = "Enter a valid date";
+  if (!errors.from && !errors.to && q.from && q.to && q.to < q.from) errors.to = "\"To\" can't be before \"From\"";
+  return { range: { from: q.from ?? null, to: q.to ?? null }, errors: Object.keys(errors).length ? errors : null };
+}

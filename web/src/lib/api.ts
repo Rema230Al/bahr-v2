@@ -93,6 +93,15 @@ export type Lead = {
 export type LeadDetail = Lead & { activities: { id: number; kind: string; body: string; by: string | null; at: string }[] };
 export type LeadPatch = Partial<Pick<Lead, "stage" | "dealValue" | "ownerId" | "followUpOn">> & { lostReason?: string };
 
+/** Inclusive YYYY-MM-DD bounds for the admin lists; "" leaves that end open. */
+export type DateRange = { from: string; to: string };
+const rangeQuery = (r?: DateRange) => {
+  const q = new URLSearchParams();
+  if (r?.from) q.set("from", r.from);
+  if (r?.to) q.set("to", r.to);
+  return q.size ? `?${q}` : "";
+};
+
 export const api = {
   sendInquiry: (b: Record<string, string>) => request<{ ok: true }>("POST", "/inquiries", b),
   openings: () => request<PublicOpening[]>("GET", "/openings"),
@@ -100,15 +109,16 @@ export const api = {
   login: (email: string, password: string) => request<{ ok: true }>("POST", "/auth/login", { email, password }),
   logout: () => request<{ ok: true }>("POST", "/auth/logout"),
   me: () => request<{ email: string }>("GET", "/admin/me"),
-  inquiries: () => request<Inquiry[]>("GET", "/admin/inquiries"),
+  inquiries: (r?: DateRange) => request<Inquiry[]>("GET", `/admin/inquiries${rangeQuery(r)}`),
   adminOpenings: () => request<AdminOpening[]>("GET", "/admin/openings"),
   createOpening: (b: { title: string; kind: string; location: string; description: string }) =>
     request<AdminOpening>("POST", "/admin/openings", b),
-  applications: (id: number) => request<Application[]>("GET", `/admin/openings/${id}/applications`),
+  applications: (id: number, r?: DateRange) =>
+    request<Application[]>("GET", `/admin/openings/${id}/applications${rangeQuery(r)}`),
   accept: (openingId: number, applicationId: number) =>
     request<AdminOpening>("POST", `/admin/openings/${openingId}/applications/${applicationId}/accept`),
   admins: () => request<{ id: number; email: string }[]>("GET", "/admin/admins"),
-  leads: () => request<Lead[]>("GET", "/admin/leads"),
+  leads: (r?: DateRange) => request<Lead[]>("GET", `/admin/leads${rangeQuery(r)}`),
   lead: (id: number) => request<LeadDetail>("GET", `/admin/leads/${id}`),
   updateLead: (id: number, b: LeadPatch) => request<LeadDetail>("PATCH", `/admin/leads/${id}`, b),
   addLeadNote: (id: number, body: string) => request<LeadDetail>("POST", `/admin/leads/${id}/notes`, { body }),

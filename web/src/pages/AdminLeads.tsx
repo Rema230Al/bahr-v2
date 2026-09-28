@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { api, ApiError, STAGES, type Lead, type LeadDetail, type LeadPatch, type Stage } from "../lib/api";
+import { api, ApiError, STAGES, type DateRange, type Lead, type LeadDetail, type LeadPatch, type Stage } from "../lib/api";
 import { SelectField, TextArea, TextField } from "../components/ui/Field";
 import MagneticButton from "../components/ui/Magnetic";
 
@@ -24,7 +24,8 @@ const ownerName = (email: string | null) => (email ? email.split("@")[0] : "Unas
 
 type Admin = { id: number; email: string };
 
-export default function Leads() {
+/** `range` (from the Dashboard) filters on the server; counts and SAR totals follow what's loaded. */
+export default function Leads({ range }: { range: DateRange }) {
   const [leads, setLeads] = useState<Lead[] | null>(null);
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [open, setOpen] = useState<{ id: number; askLost: boolean } | null>(null);
@@ -34,10 +35,20 @@ export default function Leads() {
   const [service, setService] = useState("all");
   const [owner, setOwner] = useState("all");
 
+  const { from, to } = range;
   useEffect(() => {
-    api.leads().then(setLeads, () => setLeads([]));
     api.admins().then(setAdmins, () => undefined);
   }, []);
+  useEffect(() => {
+    let live = true; // ignore a slower response for a range the admin has already changed
+    api.leads({ from, to }).then(
+      (r) => live && setLeads(r),
+      () => live && setLeads([]),
+    );
+    return () => {
+      live = false;
+    };
+  }, [from, to]);
 
   const replace = (l: Lead) => setLeads((all) => all?.map((x) => (x.id === l.id ? l : x)) ?? null);
 

@@ -66,6 +66,10 @@ const toLead = (r: LeadRow) => ({
 
 type ActivityRow = { id: number; kind: string; body: string; admin_email: string | null; created_at: Date };
 
+/** Inclusive calendar days in `timeZone`; a null end is open. */
+export type DateRange = { from: string | null; to: string | null; timeZone: string };
+const ALL_TIME: DateRange = { from: null, to: null, timeZone: "UTC" };
+
 export class NotFoundError extends Error {}
 export class DuplicateApplicationError extends Error {}
 
@@ -108,12 +112,20 @@ export function createRepo(sql: Db) {
         return row!.id;
       });
     },
-    listInquiries: () => sql`SELECT * FROM inquiries ORDER BY id DESC LIMIT 500`,
+    listInquiries: (r: DateRange = ALL_TIME) => sql`
+      SELECT * FROM inquiries
+      WHERE (${r.from}::date IS NULL OR created_at >= (${r.from}::date)::timestamp AT TIME ZONE ${r.timeZone})
+        AND (${r.to}::date IS NULL OR created_at < (${r.to}::date + 1)::timestamp AT TIME ZONE ${r.timeZone})
+      ORDER BY id DESC LIMIT 500`,
 
     listAdmins: () => sql<{ id: number; email: string }[]>`SELECT id, email FROM admins ORDER BY email`,
 
-    async listLeads() {
-      const rows = await sql<LeadRow[]>`SELECT * FROM lead_cards ORDER BY updated_at DESC, id DESC LIMIT 1000`;
+    async listLeads(r: DateRange = ALL_TIME) {
+      const rows = await sql<LeadRow[]>`
+        SELECT * FROM lead_cards
+        WHERE (${r.from}::date IS NULL OR created_at >= (${r.from}::date)::timestamp AT TIME ZONE ${r.timeZone})
+          AND (${r.to}::date IS NULL OR created_at < (${r.to}::date + 1)::timestamp AT TIME ZONE ${r.timeZone})
+        ORDER BY updated_at DESC, id DESC LIMIT 1000`;
       return rows.map(toLead);
     },
     getLead,
@@ -191,8 +203,12 @@ export function createRepo(sql: Db) {
         throw e;
       }
     },
-    listApplications: (openingId: number) =>
-      sql`SELECT * FROM applications WHERE opening_id = ${openingId} ORDER BY id ASC`,
+    listApplications: (openingId: number, r: DateRange = ALL_TIME) => sql`
+      SELECT * FROM applications
+      WHERE opening_id = ${openingId}
+        AND (${r.from}::date IS NULL OR created_at >= (${r.from}::date)::timestamp AT TIME ZONE ${r.timeZone})
+        AND (${r.to}::date IS NULL OR created_at < (${r.to}::date + 1)::timestamp AT TIME ZONE ${r.timeZone})
+      ORDER BY id ASC`,
 
     /**
      * Accepts one applicant and closes the opening, atomically. SELECT … FOR UPDATE locks the

@@ -12,7 +12,9 @@ import { SECURITY_HEADERS } from "./security/headers";
 import {
   acceptParams,
   applicationBody,
+  checkRange,
   clean,
+  dateRangeQuery,
   idParam,
   inquiryBody,
   leadPatchBody,
@@ -31,6 +33,13 @@ class HttpError extends Error {
 }
 
 const invalid = (fields: Record<string, string>) => new HttpError(400, { error: "validation", fields });
+
+/** Validated ?from/?to for the admin lists, in the admin's time zone. */
+const rangeOf = (query: { from?: string; to?: string }, timeZone: string) => {
+  const { range, errors } = checkRange(query);
+  if (errors) throw invalid(errors);
+  return { ...range, timeZone };
+};
 
 export function createApp(config: Config, db: Db) {
   const repo = createRepo(db);
@@ -157,7 +166,7 @@ export function createApp(config: Config, db: Db) {
       return { admin };
     })
     .get("/me", ({ admin }) => ({ email: admin.email }))
-    .get("/inquiries", () => repo.listInquiries())
+    .get("/inquiries", ({ query }) => repo.listInquiries(rangeOf(query, config.timeZone)), { query: dateRangeQuery })
     .get("/openings", () => repo.listOpeningsWithCounts())
     .post(
       "/openings",
@@ -171,11 +180,12 @@ export function createApp(config: Config, db: Db) {
     )
     .get(
       "/openings/:id/applications",
-      async ({ params }) => {
+      async ({ params, query }) => {
+        const range = rangeOf(query, config.timeZone);
         if (!(await repo.getOpening(params.id))) throw new HttpError(404, { error: "not_found" });
-        return repo.listApplications(params.id);
+        return repo.listApplications(params.id, range);
       },
-      { params: idParam },
+      { params: idParam, query: dateRangeQuery },
     )
     .post(
       "/openings/:id/applications/:applicationId/accept",
@@ -183,7 +193,7 @@ export function createApp(config: Config, db: Db) {
       { params: acceptParams },
     )
     .get("/admins", () => repo.listAdmins())
-    .get("/leads", () => repo.listLeads())
+    .get("/leads", ({ query }) => repo.listLeads(rangeOf(query, config.timeZone)), { query: dateRangeQuery })
     .get(
       "/leads/:id",
       async ({ params }) => {
