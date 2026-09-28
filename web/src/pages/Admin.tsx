@@ -4,6 +4,7 @@ import { api, ApiError, type AdminOpening, type Application, type Inquiry } from
 import { TextArea, TextField, SelectField } from "../components/ui/Field";
 import MagneticButton from "../components/ui/Magnetic";
 import SeaWaves, { SEA_PADDING } from "../components/ui/SeaWaves";
+import Leads from "./AdminLeads";
 
 /**
  * Admin dashboard. The UI hides itself without a session, but the real gate is the server:
@@ -85,7 +86,12 @@ function Login({ onDone }: { onDone: (me: { email: string }) => void }) {
   );
 }
 
-type Tab = "inquiries" | "openings";
+type Tab = "leads" | "inquiries" | "openings";
+const TABS: [Tab, string][] = [
+  ["leads", "Leads"],
+  ["inquiries", "Inquiries"],
+  ["openings", "Openings"],
+];
 
 function Dashboard({ email, onLogout }: { email: string; onLogout: () => void }) {
   const [tab, setTab] = useState<Tab>("inquiries");
@@ -108,7 +114,7 @@ function Dashboard({ email, onLogout }: { email: string; onLogout: () => void })
       </div>
 
       <div role="tablist" aria-label="Sections" className="mt-10 flex gap-8 border-b border-line">
-        {(["inquiries", "openings"] as const).map((k) => (
+        {TABS.map(([k, name]) => (
           <button
             key={k}
             role="tab"
@@ -119,14 +125,14 @@ function Dashboard({ email, onLogout }: { email: string; onLogout: () => void })
             onClick={() => setTab(k)}
             className="relative pb-3 font-mono text-[12px] uppercase tracking-[0.16em]"
           >
-            {k === "inquiries" ? "Inquiries" : "Openings"}
+            {name}
             {tab === k && <motion.span layoutId="tab-line" className="absolute inset-x-0 -bottom-px h-px bg-current" />}
           </button>
         ))}
       </div>
 
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="mt-10">
-        {tab === "inquiries" ? <Inquiries /> : <Openings />}
+        {tab === "leads" ? <Leads /> : tab === "inquiries" ? <Inquiries /> : <Openings />}
       </div>
     </div>
   );

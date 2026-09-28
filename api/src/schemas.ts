@@ -1,4 +1,5 @@
 import { t } from "elysia";
+import { STAGES } from "./domain/lead";
 
 /** Hidden field real people never see or fill. Bots that do get a fake success. */
 const honeypot = t.Optional(t.String({ maxLength: 500 }));
@@ -71,3 +72,16 @@ export function clean<T extends Record<string, unknown>>(body: T, mins: Partial<
   }
   return { value: out as T, errors: Object.keys(errors).length ? errors : null };
 }
+
+export const leadPatchBody = t.Object(
+  {
+    stage: t.Optional(t.UnionEnum(STAGES)),
+    dealValue: t.Optional(t.Nullable(t.Integer({ minimum: 0, maximum: 1_000_000_000 }))),
+    ownerId: t.Optional(t.Nullable(t.Integer({ minimum: 1 }))),
+    followUpOn: t.Optional(t.Nullable(t.String({ pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }))),
+    lostReason: t.Optional(t.String({ maxLength: 500 })),
+  },
+  { additionalProperties: false },
+);
+
+export const noteBody = t.Object({ body: t.String({ minLength: 1, maxLength: 2000 }) }, { additionalProperties: false });

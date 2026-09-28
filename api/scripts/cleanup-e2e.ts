@@ -2,7 +2,7 @@
  * Removes the records created by the E2E tests when they run against the live site.
  * Every E2E record carries a unique "e2e-" marker, so only test data matches:
  *   openings  "Motion Designer e2e-…"  (their applications are deleted with them)
- *   inquiries  company "Depth Co e2e-…"
+ *   inquiries  company "Depth Co e2e-…"   (their leads and lead activity are deleted with them)
  *
  *   fly ssh console -C "bun scripts/cleanup-e2e.ts"
  */

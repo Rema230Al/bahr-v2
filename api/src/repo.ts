@@ -1,5 +1,6 @@
 import { isUniqueViolation, type Db } from "./db";
 import { acceptApplicant, canApply, OpeningClosedError, type Opening, type OpeningKind } from "./domain/opening";
+import { applyLeadPatch, LeadValidationError, type LeadPatch, type Stage } from "./domain/lead";
 
 type OpeningRow = {
   id: number;
@@ -25,6 +26,46 @@ const toOpening = (r: OpeningRow): Opening => ({
   closedAt: r.closed_at ? new Date(r.closed_at).toISOString() : null,
 });
 
+type LeadRow = {
+  id: number;
+  inquiry_id: number;
+  stage: Stage;
+  deal_value: number | null;
+  owner_id: number | null;
+  owner_email: string | null;
+  follow_up_on: string | null;
+  lost_reason: string | null;
+  created_at: Date;
+  updated_at: Date;
+  name: string;
+  email: string;
+  company: string | null;
+  service: string;
+  budget: string;
+  message: string;
+};
+
+const toLead = (r: LeadRow) => ({
+  id: r.id,
+  inquiryId: r.inquiry_id,
+  stage: r.stage,
+  dealValue: r.deal_value,
+  ownerId: r.owner_id,
+  ownerEmail: r.owner_email,
+  followUpOn: r.follow_up_on,
+  lostReason: r.lost_reason,
+  createdAt: new Date(r.created_at).toISOString(),
+  updatedAt: new Date(r.updated_at).toISOString(),
+  name: r.name,
+  email: r.email,
+  company: r.company,
+  service: r.service,
+  budget: r.budget,
+  message: r.message,
+});
+
+type ActivityRow = { id: number; kind: string; body: string; admin_email: string | null; created_at: Date };
+
 export class NotFoundError extends Error {}
 export class DuplicateApplicationError extends Error {}
 
@@ -34,15 +75,84 @@ export function createRepo(sql: Db) {
     return row ? toOpening(row) : null;
   };
 
+  /** One lead with its full activity timeline (newest first). */
+  const getLead = async (id: number) => {
+    const [row] = await sql<LeadRow[]>`SELECT * FROM lead_cards WHERE id = ${id}`;
+    if (!row) return null;
+    const activities = await sql<ActivityRow[]>`
+      SELECT la.id, la.kind, la.body, a.email AS admin_email, la.created_at
+      FROM lead_activities la LEFT JOIN admins a ON a.id = la.admin_id
+      WHERE la.lead_id = ${id} ORDER BY la.id DESC`;
+    return {
+      ...toLead(row),
+      activities: activities.map((a) => ({
+        id: a.id,
+        kind: a.kind,
+        body: a.body,
+        by: a.admin_email,
+        at: new Date(a.created_at).toISOString(),
+      })),
+    };
+  };
+
   return {
-    async createInquiry(i: { name: string; email: string; company: string | null; service: string; budget: string; message: string }) {
-      const [row] = await sql<{ id: number }[]>`
-        INSERT INTO inquiries (name, email, company, service, budget, message)
-        VALUES (${i.name}, ${i.email}, ${i.company}, ${i.service}, ${i.budget}, ${i.message})
-        RETURNING id`;
-      return row!.id;
+    /** Every inquiry becomes a lead in "New" — in the same transaction, so there's never one without the other. */
+    createInquiry(i: { name: string; email: string; company: string | null; service: string; budget: string; message: string }) {
+      return sql.begin(async (tx) => {
+        const [row] = await tx<{ id: number }[]>`
+          INSERT INTO inquiries (name, email, company, service, budget, message)
+          VALUES (${i.name}, ${i.email}, ${i.company}, ${i.service}, ${i.budget}, ${i.message})
+          RETURNING id`;
+        const [lead] = await tx<{ id: number }[]>`INSERT INTO leads (inquiry_id) VALUES (${row!.id}) RETURNING id`;
+        await tx`INSERT INTO lead_activities (lead_id, kind, body) VALUES (${lead!.id}, 'created', 'Inquiry received via Let''s talk')`;
+        return row!.id;
+      });
     },
     listInquiries: () => sql`SELECT * FROM inquiries ORDER BY id DESC LIMIT 500`,
+
+    listAdmins: () => sql<{ id: number; email: string }[]>`SELECT id, email FROM admins ORDER BY email`,
+
+    async listLeads() {
+      const rows = await sql<LeadRow[]>`SELECT * FROM lead_cards ORDER BY updated_at DESC, id DESC LIMIT 1000`;
+      return rows.map(toLead);
+    },
+    getLead,
+
+    /** Locks the lead row so concurrent edits apply one after the other and each logs the right "from" value. */
+    async updateLead(id: number, patch: LeadPatch, adminId: number) {
+      await sql.begin(async (tx) => {
+        const [row] = await tx<LeadRow[]>`
+          SELECT id, stage, deal_value, owner_id, follow_up_on::text AS follow_up_on, lost_reason FROM leads WHERE id = ${id} FOR UPDATE`;
+        if (!row) throw new NotFoundError("Lead not found");
+        let ownerEmail: string | null = null;
+        if (patch.ownerId != null) {
+          const [owner] = await tx<{ email: string }[]>`SELECT email FROM admins WHERE id = ${patch.ownerId}`;
+          if (!owner) throw new LeadValidationError({ ownerId: "Unknown owner" });
+          ownerEmail = owner.email;
+        }
+        const current = { stage: row.stage, dealValue: row.deal_value, ownerId: row.owner_id, followUpOn: row.follow_up_on, lostReason: row.lost_reason };
+        const { next, activities } = applyLeadPatch(current, patch, ownerEmail);
+        if (!activities.length) return;
+        await tx`
+          UPDATE leads SET stage = ${next.stage}, deal_value = ${next.dealValue}, owner_id = ${next.ownerId},
+            follow_up_on = ${next.followUpOn}, lost_reason = ${next.lostReason}, updated_at = now()
+          WHERE id = ${id}`;
+        for (const a of activities) {
+          await tx`INSERT INTO lead_activities (lead_id, admin_id, kind, body) VALUES (${id}, ${adminId}, ${a.kind}, ${a.body})`;
+        }
+      });
+      return (await getLead(id))!;
+    },
+
+    async addLeadNote(id: number, body: string, adminId: number) {
+      const [row] = await sql<{ id: number }[]>`
+        INSERT INTO lead_activities (lead_id, admin_id, kind, body)
+        SELECT ${id}, ${adminId}, 'note', ${body} WHERE EXISTS (SELECT 1 FROM leads WHERE id = ${id})
+        RETURNING id`;
+      if (!row) throw new NotFoundError("Lead not found");
+      await sql`UPDATE leads SET updated_at = now() WHERE id = ${id}`;
+      return (await getLead(id))!;
+    },
 
     async createOpening(o: { title: string; kind: OpeningKind; location: string; description: string }) {
       const [row] = await sql<OpeningRow[]>`

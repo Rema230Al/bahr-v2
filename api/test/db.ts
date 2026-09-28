@@ -25,7 +25,7 @@ export const testDb = () => current;
 export const rawQuery = async <T,>(query: string) => (await pg.query<T>(query)).rows;
 
 export async function resetDb() {
-  await current`TRUNCATE sessions, applications, openings, inquiries, admins RESTART IDENTITY CASCADE`;
+  await current`TRUNCATE sessions, lead_activities, leads, applications, openings, inquiries, admins RESTART IDENTITY CASCADE`;
 }
 
 afterAll(async () => {

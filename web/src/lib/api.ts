@@ -64,6 +64,35 @@ export type Application = {
   created_at: string;
 };
 
+export type Stage = "new" | "contacted" | "proposal" | "won" | "lost";
+export const STAGES: [Stage, string][] = [
+  ["new", "New"],
+  ["contacted", "Contacted"],
+  ["proposal", "Proposal sent"],
+  ["won", "Won"],
+  ["lost", "Lost"],
+];
+export type Lead = {
+  id: number;
+  inquiryId: number;
+  stage: Stage;
+  dealValue: number | null;
+  ownerId: number | null;
+  ownerEmail: string | null;
+  followUpOn: string | null;
+  lostReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+  name: string;
+  email: string;
+  company: string | null;
+  service: string;
+  budget: string;
+  message: string;
+};
+export type LeadDetail = Lead & { activities: { id: number; kind: string; body: string; by: string | null; at: string }[] };
+export type LeadPatch = Partial<Pick<Lead, "stage" | "dealValue" | "ownerId" | "followUpOn">> & { lostReason?: string };
+
 export const api = {
   sendInquiry: (b: Record<string, string>) => request<{ ok: true }>("POST", "/inquiries", b),
   openings: () => request<PublicOpening[]>("GET", "/openings"),
@@ -78,4 +107,9 @@ export const api = {
   applications: (id: number) => request<Application[]>("GET", `/admin/openings/${id}/applications`),
   accept: (openingId: number, applicationId: number) =>
     request<AdminOpening>("POST", `/admin/openings/${openingId}/applications/${applicationId}/accept`),
+  admins: () => request<{ id: number; email: string }[]>("GET", "/admin/admins"),
+  leads: () => request<Lead[]>("GET", "/admin/leads"),
+  lead: (id: number) => request<LeadDetail>("GET", `/admin/leads/${id}`),
+  updateLead: (id: number, b: LeadPatch) => request<LeadDetail>("PATCH", `/admin/leads/${id}`, b),
+  addLeadNote: (id: number, body: string) => request<LeadDetail>("POST", `/admin/leads/${id}/notes`, { body }),
 };

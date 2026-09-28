@@ -25,9 +25,9 @@ export default defineConfig({
   reporter: [["list"]],
   use: { baseURL: WEB_URL, trace: "retain-on-failure" },
   projects: LIVE_URL
-    ? [{ name: "live", testMatch: /flows\.spec\.ts/, use: { ...devices["Desktop Chrome"] } }]
+    ? [{ name: "live", testMatch: /(flows|leads)\.spec\.ts/, use: { ...devices["Desktop Chrome"] } }]
     : [
-    { name: "e2e", testMatch: /flows\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
+    { name: "e2e", testMatch: /(flows|leads)\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
     { name: "e2e-mobile", testMatch: /flows\.spec\.ts/, use: { ...devices["Pixel 7"], viewport: { width: 390, height: 844 } } },
     { name: "screens", testMatch: /screens\.spec\.ts/ },
   ],

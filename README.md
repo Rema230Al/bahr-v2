@@ -2,7 +2,7 @@
 
 A full-stack concept redesign of [bybahr.com](https://bybahr.com). Scrolling is a dive from the sea surface to the abyss:
 **Surface 0 m → Sunlight 200 m (The Agency) → Twilight 1,000 m (Expertise) → Midnight 4,000 m (Selected work) → Abyss 6,000 m (Let's dive deeper)**.
-It includes a project-inquiry form, a careers board with applications, and an admin dashboard.
+It includes a project-inquiry form, a careers board with applications, and an admin dashboard with a Leads CRM.
 
 ```
 api/   Elysia + Bun + PostgreSQL (Bun.SQL, SQL migrations)   → Docker → Fly.io, database on Neon
@@ -34,7 +34,7 @@ bun run dev                   # proxies /api → localhost:3000
 ## Tests
 
 ```bash
-cd api && bun test            # 43 tests: unit + API + integration
+cd api && bun test            # 66 tests: unit + API + integration
 cd e2e && npm install && npx playwright install chromium
 npx playwright test --project=e2e --project=e2e-mobile   # E2E flows, desktop + 390px phone
 npx playwright test --project=screens                    # screenshots → e2e/screens/
@@ -45,7 +45,9 @@ npx playwright test --project=screens                    # screenshots → e2e/s
 | Unit | `api/test/opening.unit.test.ts` | An opening moves open → closed; it can't close twice |
 | API | `api/test/api.test.ts` | Validation (types, lengths, email, `https?://` only, trimming, unknown fields stripped, bad JSON), honeypot, duplicate applications (case-insensitive), every admin route 401 without or with a forged session, cookie flags, logout, CSRF origin check, rate limits (forms + login, per IP, invalid attempts count), CORS, security headers |
 | Integration | `api/test/integration.test.ts` | Data is saved and normalized; data survives a restart; accepting closes the opening and marks the others "not selected"; two simultaneous accepts, only one wins; the DB rejects a second accepted row; cross-opening accept is refused |
+| API | `api/test/leads.test.ts` | Each inquiry becomes a lead in New (existing ones too, via migration 002); stage moves are logged; Lost needs a reason; deal value / owner / follow-up date validation; notes; 404s; CSRF |
 | E2E | `e2e/tests/flows.spec.ts` | Send an inquiry → apply (and a duplicate is refused) → admin logs in (a wrong password fails first), sees the inquiry, accepts → the public board shows "Filled" |
+| E2E | `e2e/tests/leads.spec.ts` | Admin drags a lead from New to Won; it stays there after a reload and the timeline records the move |
 
 ## Security
 

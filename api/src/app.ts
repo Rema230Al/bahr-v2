@@ -4,6 +4,7 @@ import type { Config } from "./config";
 import type { Db } from "./db";
 import { createRepo, DuplicateApplicationError, NotFoundError } from "./repo";
 import { OpeningClosedError } from "./domain/opening";
+import { LeadValidationError } from "./domain/lead";
 import { createRateLimiter, RateLimitError } from "./security/rateLimit";
 import { createSessions } from "./security/session";
 import { createAdmins } from "./security/admins";
@@ -14,7 +15,9 @@ import {
   clean,
   idParam,
   inquiryBody,
+  leadPatchBody,
   loginBody,
+  noteBody,
   openingBody,
 } from "./schemas";
 
@@ -178,6 +181,31 @@ export function createApp(config: Config, db: Db) {
       "/openings/:id/applications/:applicationId/accept",
       ({ params }) => repo.accept(params.id, params.applicationId),
       { params: acceptParams },
+    )
+    .get("/admins", () => repo.listAdmins())
+    .get("/leads", () => repo.listLeads())
+    .get(
+      "/leads/:id",
+      async ({ params }) => {
+        const lead = await repo.getLead(params.id);
+        if (!lead) throw new HttpError(404, { error: "not_found" });
+        return lead;
+      },
+      { params: idParam },
+    )
+    .patch("/leads/:id", ({ params, body, admin }) => repo.updateLead(params.id, body, admin.id), {
+      params: idParam,
+      body: leadPatchBody,
+    })
+    .post(
+      "/leads/:id/notes",
+      async ({ params, body, admin, set }) => {
+        const { value, errors } = clean(body, { body: 1 });
+        if (errors) throw invalid(errors);
+        set.status = 201;
+        return await repo.addLeadNote(params.id, value.body, admin.id);
+      },
+      { params: idParam, body: noteBody },
     );
 
   return new Elysia({ serve: { maxRequestBodySize: 64 * 1024 } })
@@ -185,7 +213,7 @@ export function createApp(config: Config, db: Db) {
       cors({
         origin: config.allowedOrigin,
         credentials: true,
-        methods: ["GET", "POST", "OPTIONS"],
+        methods: ["GET", "POST", "PATCH", "OPTIONS"],
         allowedHeaders: ["Content-Type"],
         maxAge: 600,
       }),
@@ -193,7 +221,7 @@ export function createApp(config: Config, db: Db) {
     .onRequest(({ set }) => {
       Object.assign(set.headers, SECURITY_HEADERS);
     })
-    .error({ HttpError, RateLimitError, NotFoundError, DuplicateApplicationError, OpeningClosedError })
+    .error({ HttpError, RateLimitError, NotFoundError, DuplicateApplicationError, OpeningClosedError, LeadValidationError })
     .onError(({ code, error, set }) => {
       Object.assign(set.headers, SECURITY_HEADERS);
       switch (code) {
@@ -213,6 +241,9 @@ export function createApp(config: Config, db: Db) {
         case "OpeningClosedError":
           set.status = 409;
           return { error: "opening_closed" };
+        case "LeadValidationError":
+          set.status = 400;
+          return { error: "validation", fields: error.fields };
         case "VALIDATION": {
           set.status = 400;
           const fields: Record<string, string> = {};

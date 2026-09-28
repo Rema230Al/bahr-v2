@@ -93,6 +93,11 @@ describe("admin-only permissions", () => {
     ["POST", "/admin/openings", { title: "X job", kind: "job", location: "Jeddah", description: "A long enough description." }],
     ["GET", "/admin/openings/1/applications"],
     ["POST", "/admin/openings/1/applications/1/accept"],
+    ["GET", "/admin/admins"],
+    ["GET", "/admin/leads"],
+    ["GET", "/admin/leads/1"],
+    ["PATCH", "/admin/leads/1", { stage: "won" }],
+    ["POST", "/admin/leads/1/notes", { body: "hello" }],
   ];
 
   test.each(adminRoutes)("%s %s without a session → 401", async (...[method, path, body]) => {
