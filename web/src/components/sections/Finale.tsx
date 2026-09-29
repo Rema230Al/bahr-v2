@@ -39,16 +39,21 @@ export default function Finale() {
         </div>
       </div>
 
-      <div className="relative mt-20 grid gap-6 border-t border-white/10 pt-8 text-sm md:mt-28 md:grid-cols-4">
+      {/* Columns wrap (1 → 2 → 4) instead of squeezing. From md up, the fixed dive rail and its
+          depth readout sit on the inline-end edge, so the last column keeps clear of them (pe-28). */}
+      <div className="relative mt-20 grid gap-x-10 gap-y-6 border-t border-white/10 pt-8 text-sm sm:grid-cols-2 md:mt-28 md:pe-28 lg:grid-cols-4">
         <p>
           {f.place}
-          <br />
-          <span className="opacity-60">{f.region}</span>
+          {f.region.map((line) => (
+            <span key={line} className="block opacity-60">
+              {line}
+            </span>
+          ))}
         </p>
         <a href="mailto:dive@b7r.agency" className="link-underline self-start" dir="ltr">
           dive@b7r.agency
         </a>
-        <div className="flex gap-6">
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
           <a href="https://www.linkedin.com/company/bybahr" target="_blank" rel="noopener noreferrer" className="link-underline self-start">
             {f.linkedin} <span aria-hidden="true">↗</span>
           </a>
@@ -56,7 +61,7 @@ export default function Finale() {
             {t.nav.careers}
           </Link>
         </div>
-        <p className="opacity-60 md:text-end">
+        <p className="opacity-60 lg:text-end">
           {f.rights} · {lang === "ar" ? "مفهوم تصميمي" : "Concept redesign"}
         </p>
       </div>
