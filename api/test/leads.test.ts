@@ -8,6 +8,7 @@ import { ORIGIN, setup, validInquiry } from "./helpers";
 
 type Lead = {
   id: number;
+  inquiryId: number;
   stage: string;
   dealValue: number | null;
   ownerId: number | null;
@@ -38,6 +39,23 @@ describe("leads", () => {
     const detail = (await (await call("GET", `/admin/leads/${lead.id}`, { cookie })).json()) as Lead;
     expect(detail.activities).toHaveLength(1);
     expect(detail.activities[0]).toMatchObject({ kind: "created" });
+  });
+
+  test("the lead carries the client's form answers exactly, and inquiries link to their lead", async () => {
+    const { call, cookie, lead } = await withLead();
+    const detail = (await (await call("GET", `/admin/leads/${lead.id}`, { cookie })).json()) as Lead & Record<string, unknown>;
+    expect(detail).toMatchObject({
+      name: validInquiry.name,
+      email: validInquiry.email,
+      company: validInquiry.company,
+      service: validInquiry.service,
+      budget: validInquiry.budget,
+      message: validInquiry.message,
+      aiBrief: null,
+    });
+    expect(typeof detail.createdAt).toBe("string");
+    const [inquiry] = (await (await call("GET", "/admin/inquiries", { cookie })).json()) as { lead_id: number }[];
+    expect(inquiry!.lead_id).toBe(lead.id);
   });
 
   test("honeypot inquiries create no lead", async () => {
@@ -160,7 +178,7 @@ describe("leads migration", () => {
     await server.start();
     const sql = connect(`postgres://postgres@127.0.0.1:${port}/postgres?sslmode=disable`, 1);
     try {
-      expect(await migrate(sql)).toEqual(["002_leads.sql"]);
+      expect(await migrate(sql)).toEqual(["002_leads.sql", "003_inquiry_ai_brief.sql"]);
       const [lead] = await sql<{ stage: string; name: string; created_at: Date }[]>`SELECT stage, name, created_at FROM lead_cards`;
       expect(lead).toMatchObject({ stage: "new", name: "Old Inquiry" });
       expect(new Date(lead!.created_at).toISOString()).toBe("2026-01-02T10:00:00.000Z");

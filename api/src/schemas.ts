@@ -7,7 +7,8 @@ const honeypot = t.Optional(t.String({ maxLength: 500 }));
 const email = t.String({ format: "email", maxLength: 254 });
 
 export const SERVICES = ["web", "ai", "mobile", "other"] as const;
-export const BUDGETS = ["under-50k", "50k-150k", "150k-500k", "500k-plus", "not-sure"] as const;
+export const AI_BRIEF_MAX = 2000;
+export const BUDGETS =["under-50k", "50k-150k", "150k-500k", "500k-plus", "not-sure"] as const;
 
 export const inquiryBody = t.Object(
   {
@@ -17,7 +18,20 @@ export const inquiryBody = t.Object(
     service: t.UnionEnum(SERVICES),
     budget: t.UnionEnum(BUDGETS),
     message: t.String({ minLength: 10, maxLength: 4000 }),
+    /** The assistant's brief, as edited by the client. Stored and shown as plain text only. */
+    aiBrief: t.Optional(t.String({ maxLength: AI_BRIEF_MAX })),
     website: honeypot,
+  },
+  { additionalProperties: false },
+);
+
+/** "Help me shape my idea": three short answers, capped so a request can't get expensive. */
+export const briefBody = t.Object(
+  {
+    lang: t.UnionEnum(["en", "ar"]),
+    idea: t.String({ minLength: 10, maxLength: 600 }),
+    audience: t.Optional(t.String({ maxLength: 300 })),
+    features: t.Optional(t.String({ maxLength: 600 })),
   },
   { additionalProperties: false },
 );

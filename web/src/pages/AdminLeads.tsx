@@ -323,6 +323,12 @@ function Panel({
                 {serviceLabel(lead.service)} · Budget {lead.budget} · {new Date(lead.createdAt).toLocaleDateString()}
               </p>
               <p className="mt-4 whitespace-pre-line font-light leading-relaxed">{lead.message}</p>
+              {lead.aiBrief && (
+                <div className="mt-6 border-s border-line ps-4" data-testid="ai-brief">
+                  <p className="label">AI brief · edited by client</p>
+                  <p className="mt-2 whitespace-pre-line font-light leading-relaxed">{lead.aiBrief}</p>
+                </div>
+              )}
             </div>
 
             {msg && <p role="status">{msg}</p>}

@@ -17,6 +17,8 @@ export type Config = {
   /** IANA zone whose calendar days the admin date filter uses (e.g. "Asia/Riyadh"). */
   timeZone: string;
   rateLimit: { formMax: number; formWindowMs: number; loginMax: number; loginWindowMs: number };
+  /** Brief assistant. No API key = demo mode (sample briefs, no calls to Anthropic). */
+  ai: { apiKey: string | null; model: string; timeoutMs: number; ipMax: number; ipWindowMs: number; dailyMax: number };
 };
 
 type Env = Record<string, string | undefined>;
@@ -72,6 +74,14 @@ export function loadConfig(env: Env = process.env): Config {
       formWindowMs: int(env.RATE_LIMIT_FORM_WINDOW_MS, 10 * 60_000),
       loginMax: int(env.RATE_LIMIT_LOGIN_MAX, 5),
       loginWindowMs: int(env.RATE_LIMIT_LOGIN_WINDOW_MS, 15 * 60_000),
+    },
+    ai: {
+      apiKey: env.ANTHROPIC_API_KEY?.trim() || null,
+      model: env.AI_MODEL?.trim() || "claude-opus-5-5",
+      timeoutMs: int(env.AI_TIMEOUT_MS, 20_000),
+      ipMax: int(env.RATE_LIMIT_AI_MAX, 5),
+      ipWindowMs: int(env.RATE_LIMIT_AI_WINDOW_MS, 60 * 60_000),
+      dailyMax: int(env.AI_DAILY_CAP, 200),
     },
   };
 }

@@ -182,6 +182,12 @@ function Inquiries({ range }: { range: DateRange }) {
             · {q.service} · {q.budget}
           </p>
           <p className="mt-4 whitespace-pre-line font-light leading-relaxed">{q.message}</p>
+          {q.ai_brief && (
+            <div className="mt-4 border-s border-line ps-4">
+              <p className="label">AI brief · edited by client</p>
+              <p className="mt-2 whitespace-pre-line font-light leading-relaxed">{q.ai_brief}</p>
+            </div>
+          )}
         </li>
       ))}
     </ul>

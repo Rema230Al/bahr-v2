@@ -51,6 +51,7 @@ export type Inquiry = {
   service: string;
   budget: string;
   message: string;
+  ai_brief: string | null;
   created_at: string;
 };
 export type Application = {
@@ -89,6 +90,7 @@ export type Lead = {
   service: string;
   budget: string;
   message: string;
+  aiBrief: string | null;
 };
 export type LeadDetail = Lead & { activities: { id: number; kind: string; body: string; by: string | null; at: string }[] };
 export type LeadPatch = Partial<Pick<Lead, "stage" | "dealValue" | "ownerId" | "followUpOn">> & { lostReason?: string };
@@ -104,6 +106,8 @@ const rangeQuery = (r?: DateRange) => {
 
 export const api = {
   sendInquiry: (b: Record<string, string>) => request<{ ok: true }>("POST", "/inquiries", b),
+  brief: (b: { lang: "en" | "ar"; idea: string; audience: string; features: string }) =>
+    request<{ brief: string; demo: boolean }>("POST", "/assistant/brief", b),
   openings: () => request<PublicOpening[]>("GET", "/openings"),
   apply: (id: number, b: Record<string, string>) => request<{ ok: true }>("POST", `/openings/${id}/applications`, b),
   login: (email: string, password: string) => request<{ ok: true }>("POST", "/auth/login", { email, password }),

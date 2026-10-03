@@ -5,6 +5,7 @@ import { api, ApiError } from "../../lib/api";
 import { errorMessage, trimAll, validate } from "../../lib/validate";
 import { Honeypot, SelectField, TextArea, TextField } from "../ui/Field";
 import MagneticButton from "../ui/Magnetic";
+import BriefAssistant from "./BriefAssistant";
 
 const EMPTY = { name: "", email: "", company: "", service: "web", budget: "not-sure", message: "" };
 const RULES = {
@@ -20,6 +21,7 @@ export default function Contact() {
   const c = t.contact;
   const [values, setValues] = useState(EMPTY);
   const [website, setWebsite] = useState("");
+  const [aiBrief, setAiBrief] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
   const [formError, setFormError] = useState("");
@@ -35,9 +37,10 @@ export default function Contact() {
     if (Object.keys(errs).length) return;
     setStatus("sending");
     try {
-      await api.sendInquiry({ ...trimAll(values), website });
+      await api.sendInquiry({ ...trimAll(values), website, ...(aiBrief.trim() ? { aiBrief: aiBrief.trim() } : {}) });
       setStatus("sent");
       setValues(EMPTY);
+      setAiBrief("");
     } catch (err) {
       setStatus("idle");
       if (err instanceof ApiError && err.code === "validation") setErrors(err.fields);
@@ -103,6 +106,9 @@ export default function Contact() {
                 </div>
                 <div className="md:col-span-2">
                   <TextArea label={c.fields.message} name="message" value={values.message} onChange={set("message")} error={errors.message} maxLength={4000} required />
+                </div>
+                <div className="md:col-span-2">
+                  <BriefAssistant brief={aiBrief} onBrief={setAiBrief} seed={values.message} />
                 </div>
                 <Honeypot value={website} onChange={setWebsite} />
                 {formError && (

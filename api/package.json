@@ -9,6 +9,7 @@
     "typescript": "5"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
     "@elysiajs/cors": "^1.4.2",
     "elysia": "^1.4.30"
   },

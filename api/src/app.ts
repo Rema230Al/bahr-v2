@@ -9,9 +9,12 @@ import { createRateLimiter, RateLimitError } from "./security/rateLimit";
 import { createSessions } from "./security/session";
 import { createAdmins } from "./security/admins";
 import { SECURITY_HEADERS } from "./security/headers";
+import { AssistantUnavailableError, createAssistant, plainText } from "./assistant";
 import {
   acceptParams,
+  AI_BRIEF_MAX,
   applicationBody,
+  briefBody,
   checkRange,
   clean,
   dateRangeQuery,
@@ -47,6 +50,10 @@ export function createApp(config: Config, db: Db) {
   const admins = createAdmins(db);
   const formLimiter = createRateLimiter(config.rateLimit.formMax, config.rateLimit.formWindowMs);
   const loginLimiter = createRateLimiter(config.rateLimit.loginMax, config.rateLimit.loginWindowMs);
+  const assistLimiter = createRateLimiter(config.ai.ipMax, config.ai.ipWindowMs);
+  /** One bucket shared by everyone: a hard ceiling on what the assistant can cost per day. */
+  const assistDailyCap = createRateLimiter(config.ai.dailyMax, 24 * 60 * 60_000);
+  const assistant = createAssistant(config.ai);
   const cookieName = config.cookieSecure ? "__Host-bahr_session" : "bahr_session";
 
   /** Client IP: only trust forwarding headers set by a proxy we control. */
@@ -93,7 +100,8 @@ export function createApp(config: Config, db: Db) {
         if (body.website) return fakeSuccess(set);
         const { value, errors } = clean(body, { name: 2, message: 10 });
         if (errors) throw invalid(errors);
-        const id = await repo.createInquiry({ ...value, company: value.company || null });
+        const aiBrief = value.aiBrief ? plainText(value.aiBrief, AI_BRIEF_MAX) : "";
+        const id = await repo.createInquiry({ ...value, company: value.company || null, aiBrief: aiBrief || null });
         set.status = 201;
         return { ok: true, id };
       },
@@ -101,6 +109,29 @@ export function createApp(config: Config, db: Db) {
         body: inquiryBody,
         transform: ({ request, server, body }) => {
           formLimiter.hit(`inquiry:${clientIp(request, server)}`);
+          trimStrings(body);
+        },
+      },
+    )
+    .post(
+      "/assistant/brief",
+      async ({ body, request }) => {
+        assertSameOrigin(request);
+        const { value, errors } = clean(body, { idea: 10 });
+        if (errors) throw invalid(errors);
+        assistDailyCap.hit("global");
+        const brief = await assistant.writeBrief({
+          lang: value.lang,
+          idea: value.idea,
+          audience: value.audience ?? "",
+          features: value.features ?? "",
+        });
+        return { brief, demo: assistant.demo };
+      },
+      {
+        body: briefBody,
+        transform: ({ request, server, body }) => {
+          assistLimiter.hit(`assist:${clientIp(request, server)}`);
           trimStrings(body);
         },
       },
@@ -231,7 +262,7 @@ export function createApp(config: Config, db: Db) {
     .onRequest(({ set }) => {
       Object.assign(set.headers, SECURITY_HEADERS);
     })
-    .error({ HttpError, RateLimitError, NotFoundError, DuplicateApplicationError, OpeningClosedError, LeadValidationError })
+    .error({ HttpError, RateLimitError, NotFoundError, DuplicateApplicationError, OpeningClosedError, LeadValidationError, AssistantUnavailableError })
     .onError(({ code, error, set }) => {
       Object.assign(set.headers, SECURITY_HEADERS);
       switch (code) {
@@ -254,6 +285,9 @@ export function createApp(config: Config, db: Db) {
         case "LeadValidationError":
           set.status = 400;
           return { error: "validation", fields: error.fields };
+        case "AssistantUnavailableError":
+          set.status = 503;
+          return { error: "assistant_unavailable" };
         case "VALIDATION": {
           set.status = 400;
           const fields: Record<string, string> = {};

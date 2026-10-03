@@ -43,6 +43,7 @@ type LeadRow = {
   service: string;
   budget: string;
   message: string;
+  ai_brief: string | null;
 };
 
 const toLead = (r: LeadRow) => ({
@@ -62,6 +63,7 @@ const toLead = (r: LeadRow) => ({
   service: r.service,
   budget: r.budget,
   message: r.message,
+  aiBrief: r.ai_brief,
 });
 
 type ActivityRow = { id: number; kind: string; body: string; admin_email: string | null; created_at: Date };
@@ -101,22 +103,23 @@ export function createRepo(sql: Db) {
 
   return {
     /** Every inquiry becomes a lead in "New" — in the same transaction, so there's never one without the other. */
-    createInquiry(i: { name: string; email: string; company: string | null; service: string; budget: string; message: string }) {
+    createInquiry(i: { name: string; email: string; company: string | null; service: string; budget: string; message: string; aiBrief?: string | null }) {
       return sql.begin(async (tx) => {
         const [row] = await tx<{ id: number }[]>`
-          INSERT INTO inquiries (name, email, company, service, budget, message)
-          VALUES (${i.name}, ${i.email}, ${i.company}, ${i.service}, ${i.budget}, ${i.message})
+          INSERT INTO inquiries (name, email, company, service, budget, message, ai_brief)
+          VALUES (${i.name}, ${i.email}, ${i.company}, ${i.service}, ${i.budget}, ${i.message}, ${i.aiBrief ?? null})
           RETURNING id`;
         const [lead] = await tx<{ id: number }[]>`INSERT INTO leads (inquiry_id) VALUES (${row!.id}) RETURNING id`;
         await tx`INSERT INTO lead_activities (lead_id, kind, body) VALUES (${lead!.id}, 'created', 'Inquiry received via Let''s talk')`;
         return row!.id;
       });
     },
+    /** Each inquiry carries its lead's id, so the admin can open the same side panel from either list. */
     listInquiries: (r: DateRange = ALL_TIME) => sql`
-      SELECT * FROM inquiries
-      WHERE (${r.from}::date IS NULL OR created_at >= (${r.from}::date)::timestamp AT TIME ZONE ${r.timeZone})
-        AND (${r.to}::date IS NULL OR created_at < (${r.to}::date + 1)::timestamp AT TIME ZONE ${r.timeZone})
-      ORDER BY id DESC LIMIT 500`,
+      SELECT i.*, l.id AS lead_id FROM inquiries i LEFT JOIN leads l ON l.inquiry_id = i.id
+      WHERE (${r.from}::date IS NULL OR i.created_at >= (${r.from}::date)::timestamp AT TIME ZONE ${r.timeZone})
+        AND (${r.to}::date IS NULL OR i.created_at < (${r.to}::date + 1)::timestamp AT TIME ZONE ${r.timeZone})
+      ORDER BY i.id DESC LIMIT 500`,
 
     listAdmins: () => sql<{ id: number; email: string }[]>`SELECT id, email FROM admins ORDER BY email`,
 

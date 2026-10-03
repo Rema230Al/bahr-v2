@@ -27,7 +27,7 @@ export default defineConfig({
   projects: LIVE_URL
     ? [{ name: "live", testMatch: /(flows|leads|date-filter)\.spec\.ts/, use: { ...devices["Desktop Chrome"] } }]
     : [
-    { name: "e2e", testMatch: /(flows|leads|date-filter)\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
+    { name: "e2e", testMatch: /(flows|leads|date-filter|assistant)\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
     { name: "e2e-mobile", testMatch: /(flows|date-filter)\.spec\.ts/, use: { ...devices["Pixel 7"], viewport: { width: 390, height: 844 } } },
     { name: "screens", testMatch: /screens\.spec\.ts/ },
   ],
@@ -49,6 +49,8 @@ export default defineConfig({
         // Both device projects share one IP; limiter behaviour itself is covered by the API tests.
         RATE_LIMIT_FORM_MAX: "50",
         RATE_LIMIT_LOGIN_MAX: "50",
+        // Always demo mode: E2E must never call Anthropic, even if api/.env has a key.
+        ANTHROPIC_API_KEY: "",
       },
     },
     {
