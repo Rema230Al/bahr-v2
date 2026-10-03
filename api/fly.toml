@@ -1,7 +1,7 @@
 # Deploy:  fly deploy
 # Secrets (never in this file):  fly secrets set DATABASE_URL=… SESSION_SECRET=… ADMIN_EMAIL=… ADMIN_PASSWORD=… PROXY_SECRET=… ALLOWED_ORIGIN=…
 app = "bahr-api"
-primary_region = "fra"  # Frankfurt: closest to Jeddah among Fly regions, and next to Neon's eu-central-1
+primary_region = "iad"  # Virginia: next to the Neon database in AWS us-east-2 (every query is a round trip)
 
 [build]
 
