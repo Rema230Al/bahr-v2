@@ -5,6 +5,7 @@ import { defineConfig, devices } from "@playwright/test";
  *  - local (default): isolated ports + a throwaway in-memory PostgreSQL, so E2E never touches your data.
  *  - live: LIVE_URL=https://… LIVE_ADMIN_EMAIL=… LIVE_ADMIN_PASSWORD=… npx playwright test
  *    runs the desktop flows against the deployed site. Credentials come only from the environment.
+ *    The assistant test expects DEMO MODE (no ANTHROPIC_API_KEY on the server).
  */
 const LIVE_URL = process.env.LIVE_URL?.replace(/\/$/, "");
 const API_PORT = 3100;
@@ -25,7 +26,7 @@ export default defineConfig({
   reporter: [["list"]],
   use: { baseURL: WEB_URL, trace: "retain-on-failure" },
   projects: LIVE_URL
-    ? [{ name: "live", testMatch: /(flows|leads|date-filter)\.spec\.ts/, use: { ...devices["Desktop Chrome"] } }]
+    ? [{ name: "live", testMatch: /(flows|leads|date-filter|assistant)\.spec\.ts/, use: { ...devices["Desktop Chrome"] } }]
     : [
     { name: "e2e", testMatch: /(flows|leads|date-filter|assistant)\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
     { name: "e2e-mobile", testMatch: /(flows|date-filter)\.spec\.ts/, use: { ...devices["Pixel 7"], viewport: { width: 390, height: 844 } } },
