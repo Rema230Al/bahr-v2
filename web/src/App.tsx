@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Route, Routes, useLocation } from "react-router-dom";
 import { usePrefs } from "./i18n/PrefsProvider";
 import Nav from "./components/ui/Nav";
 import Cursor from "./components/ui/Cursor";
@@ -12,6 +12,8 @@ const Admin = lazy(() => import("./pages/Admin"));
 
 export default function App() {
   const { t } = usePrefs();
+  // The admin is a calm work tool with its own sidebar: no site nav, custom cursor or grain.
+  const admin = useLocation().pathname === "/admin";
   return (
     <>
       <a
@@ -21,7 +23,7 @@ export default function App() {
         {t.meta.skip}
       </a>
       <SmoothScroll />
-      <Nav />
+      {!admin && <Nav />}
       <main id="main" className="relative">
         <Suspense fallback={<div className="min-h-[100svh]" />}>
           <Routes>
@@ -32,8 +34,12 @@ export default function App() {
           </Routes>
         </Suspense>
       </main>
-      <Cursor />
-      <Grain />
+      {!admin && (
+        <>
+          <Cursor />
+          <Grain />
+        </>
+      )}
     </>
   );
 }

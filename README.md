@@ -49,7 +49,7 @@ npx playwright test --project=screens                    # screenshots → e2e/s
 | E2E | `e2e/tests/flows.spec.ts` | Send an inquiry → apply (and a duplicate is refused) → admin logs in (a wrong password fails first), sees the inquiry, accepts → the public board shows "Filled" |
 | API | `api/test/date-range.test.ts` | `?from`/`?to` on inquiries, leads and applications: inclusive days in `ADMIN_TIME_ZONE` (checked one minute either side of each edge), open-ended ranges, impossible dates and "to" before "from" refused, admin-only |
 | E2E | `e2e/tests/leads.spec.ts` | Admin drags a lead from New to Won; it stays there after a reload and the timeline records the move |
-| E2E | `e2e/tests/date-filter.spec.ts` | Admin picks a past range (today's inquiry disappears, Leads counts drop to 0), "to" before "from" is flagged, the range is kept across tabs, "Today" brings it back, Clear resets (desktop + phone) |
+| E2E | `e2e/tests/date-filter.spec.ts` | Admin filter bar: search narrows the list, a past date range hides today's inquiry (Leads stats and counts drop to 0), "to" before "from" is flagged, the range is kept across views, "Today" brings it back, the Stage dropdown filters the board, each chip removes its filter (desktop + phone) |
 
 ## Security
 

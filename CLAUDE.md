@@ -35,7 +35,10 @@ All tokens live in `web/src/index.css` (`@theme` + `:root` / `[data-theme="dark"
 - Arabic: never letter-space or uppercase; every string needs EN + AR; use logical props (`ms-`, `inset-inline`, `text-start`) so RTL works.
 
 ## Admin pages
-Same brand (tokens, fonts, components) but calm and functional. No scroll-driven/GSAP animations or heavy effects. Only subtle Framer Motion: fade/slide-in of ~16px, `layoutId` tab indicator, `AnimatePresence` for swaps (see `pages/Admin.tsx`). `SeaWaves` appears only on the sign-in screen; the dashboard has no ambient motion or wave background.
+Same brand (tokens, fonts, components) but calm and functional: a SaaS-style dashboard. No scroll-driven/GSAP animations or heavy effects. Only subtle Framer Motion: fade/slide-in of ~16px, `layoutId` nav indicator, `AnimatePresence` for swaps. `SeaWaves` appears only on the sign-in screen; the dashboard has no ambient motion or wave background. `/admin` renders without the public Nav, Cursor, Grain and Lenis (`App.tsx`, `SmoothScroll.tsx`).
+- Shell in `pages/Admin.tsx` (session gate, login, layout); views and pieces in `pages/admin/`: `Sidebar` (navy; a menu below `lg`), `FilterBar` (search, date popover, dropdown pills, removable chips), `Leads` + `LeadPanel`, `Inquiries`, `Openings`, `ui.tsx` (`Button`, `Avatar`, `ServiceTag`, `StatusBadge`, `Empty`), `format.ts`, `filters.ts` (views + which filters each uses).
+- Admin-only surfaces live under `.admin` in `index.css`: `--card` (white / lifted navy), `--sunken`, `--side-*`, `--on-accent`, plus `.card`, `.tag-{web,ai,mobile,other}`, `.dot-{stage}`. Inside `.admin`, `.label` is normal case and `.field` is compact. Reuse these; text is normal case (no mono uppercase) in the dashboard.
+- E2E: use `e2e/tests/admin.ts` (`signIn`, `openView`, `signOut`); it opens the mobile menu when needed.
 
 ## Working rules
 - Simplest correct solution; reuse existing code, components, and tokens before adding anything new.

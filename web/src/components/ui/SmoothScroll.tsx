@@ -5,13 +5,14 @@ import { gsap, ScrollTrigger } from "../../lib/gsap";
 import { getLenis, setLenis } from "../../lib/scroll";
 import { useReducedMotion } from "../../lib/hooks";
 
-/** Lenis smooth scrolling driven by GSAP's ticker. Disabled (native scroll) with reduced motion. */
+/** Lenis smooth scrolling driven by GSAP's ticker. Native scroll with reduced motion and in the admin. */
 export default function SmoothScroll() {
   const { pathname } = useLocation();
   const reduced = useReducedMotion();
+  const off = reduced || pathname === "/admin";
 
   useEffect(() => {
-    if (reduced) return;
+    if (off) return;
     const lenis = new Lenis({ lerp: 0.16, wheelMultiplier: 1.1, touchMultiplier: 1.6 });
     setLenis(lenis);
     lenis.on("scroll", ScrollTrigger.update);
@@ -23,7 +24,7 @@ export default function SmoothScroll() {
       lenis.destroy();
       setLenis(null);
     };
-  }, [reduced]);
+  }, [off]);
 
   // New page → start at the top and let triggers remeasure.
   useEffect(() => {

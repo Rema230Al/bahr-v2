@@ -200,6 +200,98 @@ html.lenis body {
   }
 }
 
+/*
+ * ---------- Admin dashboard ----------
+ * A calm, functional surface built from the brand palette: white cards on the beige page in
+ * light, lifted navy cards in dark, a navy sidebar (the dive's twilight / abyss blues).
+ * Scoped to .admin so the public site keeps its own type and fields.
+ */
+@layer components {
+  .admin {
+    --card: #ffffff;
+    --on-accent: #ffffff;
+    --side-bg: #0c2240;
+    --side-ink: #dde6f0;
+    --side-muted: #9aa9bb;
+    --sunken: rgb(36 36 35 / 0.035);
+  }
+  [data-theme="dark"] .admin {
+    --card: color-mix(in srgb, var(--ink) 6%, var(--bg));
+    --on-accent: var(--bg);
+    --side-bg: #0a1628;
+    --sunken: rgb(0 0 0 / 0.16);
+  }
+
+  /* Normal-case labels and compact fields inside the dashboard */
+  .admin .label {
+    font-family: var(--font-display);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--muted);
+    opacity: 1;
+  }
+  .admin .field {
+    background-color: var(--card);
+    border-radius: 6px;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.875rem;
+  }
+  .admin select.field {
+    padding-inline-end: 2.25rem;
+  }
+  .admin .field:hover {
+    border-color: color-mix(in srgb, var(--ink) 30%, transparent);
+  }
+  .admin .field:focus-visible {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  .admin :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+
+  /* Service tags: blue, navy, mist and sand — all from the dive's palette */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+    white-space: nowrap;
+  }
+  .tag-web { background: rgb(14 97 173 / 0.12); color: #0e61ad; }
+  .tag-ai { background: rgb(12 34 64 / 0.1); color: #0c2240; }
+  .tag-mobile { background: rgb(169 196 208 / 0.45); color: #14262f; }
+  .tag-other { background: rgb(36 36 35 / 0.07); color: var(--muted); }
+  [data-theme="dark"] .tag-web { background: rgb(106 168 234 / 0.16); color: #9cc8f5; }
+  [data-theme="dark"] .tag-ai { background: rgb(142 192 255 / 0.1); color: #dde6f0; }
+  [data-theme="dark"] .tag-mobile { background: rgb(169 196 208 / 0.18); color: #a9c4d0; }
+  [data-theme="dark"] .tag-other { background: rgb(223 230 238 / 0.08); }
+
+  /* Pipeline stages deepen like the dive: mist → sunlight → blue → navy; lost stays muted */
+  .dot { width: 0.5rem; height: 0.5rem; border-radius: 999px; flex: none; }
+  .dot-new { background: #a9c4d0; }
+  .dot-contacted { background: #1a4f86; }
+  .dot-proposal { background: #0e61ad; }
+  .dot-won { background: #0c2240; }
+  .dot-lost { background: var(--muted); opacity: 0.6; }
+  [data-theme="dark"] .dot-contacted { background: #9cc8f5; }
+  [data-theme="dark"] .dot-proposal { background: #6aa8ea; }
+  [data-theme="dark"] .dot-won { background: #8ec0ff; }
+}
+
 /* Arabic: connected script must never be letter-spaced or uppercased */
 [lang="ar"] .display,
 [lang="ar"] .label,

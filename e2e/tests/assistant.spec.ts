@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ADMIN } from "../playwright.config";
+import { signIn } from "./admin";
 
 /** "Help me shape my idea": answer the questions, edit the drafted brief, send it with the form, see it in the admin. */
 test("a visitor shapes their idea with the assistant and sends the brief", async ({ page }, testInfo) => {
@@ -29,11 +29,7 @@ test("a visitor shapes their idea with the assistant and sends the brief", async
   await form.getByRole("button", { name: /send inquiry/i }).click();
   await expect(page.getByRole("status")).toContainText("Thank you");
 
-  await page.goto("/admin");
-  await page.getByLabel("Email").fill(ADMIN.email);
-  await page.getByLabel("Password").fill(ADMIN.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await page.getByRole("tab", { name: "Leads" }).click();
+  await signIn(page); // opens on Leads
   await page.getByTestId("lead").filter({ hasText: company }).getByRole("button", { name: /Huda Al-Shehri/ }).click();
   const shown = page.getByRole("dialog").getByTestId("ai-brief");
   await expect(shown).toContainText("Best-fit Bahr service");

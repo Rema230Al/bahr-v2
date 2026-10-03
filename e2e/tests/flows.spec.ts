@@ -1,5 +1,6 @@
 import { expect, request, test, type APIRequestContext } from "@playwright/test";
 import { ADMIN, WEB_URL } from "../playwright.config";
+import { openView } from "./admin";
 
 /**
  * The three core journeys, end to end through the real UI, Vite proxy, Elysia API and SQLite:
@@ -93,20 +94,21 @@ test("the admin logs in, reviews, and accepts the applicant — the opening clos
 
   await page.getByLabel("Password").fill(ADMIN.password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Leads" })).toBeVisible();
 
   // The inquiry from test 1 is there
+  await openView(page, "Inquiries");
   await expect(page.getByTestId("inquiry").filter({ hasText: inquirer.company })).toBeVisible();
 
   // Open the opening, find the applicant, accept (two-step confirm)
-  await page.getByRole("tab", { name: "Openings" }).click();
+  await openView(page, "Openings");
   await page.getByRole("button", { name: new RegExp(openingTitle) }).click();
   const card = page.getByTestId("applicant").filter({ hasText: applicant.email });
   await card.getByRole("button", { name: `Accept ${applicant.name}` }).click();
   await card.getByRole("button", { name: "Confirm accept" }).click();
 
-  await expect(card).toContainText("accepted");
-  await expect(page.getByRole("button", { name: new RegExp(openingTitle) })).toContainText("closed");
+  await expect(card).toContainText(/accepted/i);
+  await expect(page.getByRole("button", { name: new RegExp(openingTitle) })).toContainText(/closed/i);
 
   // Publicly, the opening now shows as filled and takes no applications
   await page.goto("/careers");

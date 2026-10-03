@@ -1,10 +1,10 @@
 import { expect, request, test } from "@playwright/test";
-import { ADMIN, WEB_URL } from "../playwright.config";
+import { WEB_URL } from "../playwright.config";
+import { openView, signIn } from "./admin";
 
 /** Leads CRM: a "Let's talk" inquiry shows up as a lead in New, and dragging it to Won sticks. */
 
-// Tall enough that the board needs no scrolling: Lenis smooth-scroll would otherwise shift the
-// page between Playwright measuring the card and pressing the mouse.
+// Tall enough that the whole board is on screen, so the drag needs no scrolling.
 test.use({ viewport: { width: 1440, height: 1400 } });
 
 test("the admin drags a lead from New to Won", async ({ page }, testInfo) => {
@@ -17,11 +17,7 @@ test("the admin drags a lead from New to Won", async ({ page }, testInfo) => {
   expect(sent.status()).toBe(201);
   await visitor.dispose();
 
-  await page.goto("/admin");
-  await page.getByLabel("Email").fill(ADMIN.email);
-  await page.getByLabel("Password").fill(ADMIN.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await page.getByRole("tab", { name: "Leads" }).click();
+  await signIn(page); // Leads is the first view
 
   const newCol = page.getByTestId("stage-new");
   const wonCol = page.getByTestId("stage-won");
@@ -34,7 +30,7 @@ test("the admin drags a lead from New to Won", async ({ page }, testInfo) => {
 
   // Saved on the server, not just moved on screen
   await page.reload();
-  await page.getByRole("tab", { name: "Leads" }).click();
+  await openView(page, "Leads");
   const won = page.getByTestId("stage-won").getByTestId("lead").filter({ hasText: company });
   await expect(won).toBeVisible();
   await won.getByRole("button", { name: /Reem Al-Qahtani/ }).click();
