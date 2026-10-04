@@ -18,7 +18,7 @@ if (config.adminEmail && config.adminPassword) {
 
 const app = createApp(config, sql).listen({ port: config.port, hostname: "0.0.0.0" });
 
-console.log(`Bahr API listening on :${app.server?.port} (origin ${config.allowedOrigin})`);
+console.log(`Bahr API listening on :${app.server?.port} (origin ${config.allowedOrigin}, assistant: ${config.ai.provider})`);
 
 const shutdown = async () => {
   await app.stop();

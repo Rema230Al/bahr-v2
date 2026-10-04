@@ -34,7 +34,7 @@ bun run dev                   # proxies /api → localhost:3000
 ## Tests
 
 ```bash
-cd api && bun test            # 72 tests: unit + API + integration
+cd api && bun test            # 88 tests: unit + API + integration
 cd e2e && npm install && npx playwright install chromium
 npx playwright test --project=e2e --project=e2e-mobile   # E2E flows, desktop + 390px phone
 npx playwright test --project=screens                    # screenshots → e2e/screens/
@@ -48,6 +48,8 @@ npx playwright test --project=screens                    # screenshots → e2e/s
 | API | `api/test/leads.test.ts` | Each inquiry becomes a lead in New (existing ones too, via migration 002); stage moves are logged; Lost needs a reason; deal value / owner / follow-up date validation; notes; 404s; CSRF |
 | E2E | `e2e/tests/flows.spec.ts` | Send an inquiry → apply (and a duplicate is refused) → admin logs in (a wrong password fails first), sees the inquiry, accepts → the public board shows "Filled" |
 | API | `api/test/date-range.test.ts` | `?from`/`?to` on inquiries, leads and applications: inclusive days in `ADMIN_TIME_ZONE` (checked one minute either side of each edge), open-ended ranges, impossible dates and "to" before "from" refused, admin-only |
+| API | `api/test/assistant.test.ts` | Demo briefs (EN + AR, no prices), input caps, other origins refused, per-IP limit and global daily cap, the edited brief stored and shown as plain text |
+| Unit + API | `api/test/assistant-providers.test.ts` | `AI_PROVIDER` selection and boot checks; Workers AI request (endpoint, token, model, system prompt, client text neutralised inside `<client_answers>`), output cleaned (reasoning, Markdown, money lines, control chars, length cap), cut-off/malformed/HTTP-error/timeout answers refused without leaking the token, limits and origin check applied before any call |
 | E2E | `e2e/tests/leads.spec.ts` | Admin drags a lead from New to Won; it stays there after a reload and the timeline records the move |
 | E2E | `e2e/tests/date-filter.spec.ts` | Admin filter bar: search narrows the list, a past date range hides today's inquiry (Leads stats and counts drop to 0), "to" before "from" is flagged, the range is kept across views, "Today" brings it back, the Stage dropdown filters the board, each chip removes its filter (desktop + phone) |
 
@@ -62,6 +64,24 @@ npx playwright test --project=screens                    # screenshots → e2e/s
 - **CORS**: only `ALLOWED_ORIGIN`, with credentials. **Headers**: strict CSP, HSTS, `X-Frame-Options: DENY`, nosniff, Referrer-Policy, Permissions-Policy. On the API these are set in `security/headers.ts`; on the site, in `web/public/_headers`.
 - **Secrets** live only in env vars: `api/.env.example`, `web/.env.example`, Fly secrets, and `wrangler secret`.
 - **Client IP for rate limiting**: the API trusts `x-client-ip` only when it arrives with the Worker's `PROXY_SECRET`.
+
+## AI brief assistant
+
+"Help me shape my idea" on the Let's talk form drafts a short project brief from three answers. The API is the only
+place that talks to a model (`api/src/assistant.ts`); `AI_PROVIDER` picks who writes the brief:
+
+| `AI_PROVIDER` | Needs | Notes |
+|---|---|---|
+| `demo` | nothing | Sample brief built from the answers. Used by E2E. |
+| `workers-ai` | `WORKERS_AI_ACCOUNT_ID`, `WORKERS_AI_TOKEN` | Cloudflare Workers AI over its OpenAI-compatible REST endpoint. Default model `@cf/google/gemma-4-26b-a4b-it` (override with `WORKERS_AI_MODEL`). Free tier: 10,000 neurons/day ≈ several hundred briefs. |
+| `anthropic` | `ANTHROPIC_API_KEY` | Claude (`AI_MODEL`, default `claude-opus-5-5`). |
+
+Left unset, it is `anthropic` when `ANTHROPIC_API_KEY` is set and `demo` otherwise. A provider named explicitly without
+its credentials stops the API at boot. Whatever the provider, the same guards apply: per-IP limit (`RATE_LIMIT_AI_MAX` /
+`RATE_LIMIT_AI_WINDOW_MS`) and a global daily cap (`AI_DAILY_CAP`) checked before any call, same-origin check, capped
+inputs, client text wrapped and neutralised as data, a capped output budget and `AI_TIMEOUT_MS`, and output reduced to
+plain text with price lines removed. A cut-off or failed answer is a 503 with no details; logs carry only the provider
+and an error name or HTTP status.
 
 ## Architecture notes
 
@@ -98,6 +118,8 @@ ones not yet recorded in `schema_migrations` (inside one transaction, under an a
 cd api
 fly launch --no-deploy --copy-config --name bahr-api
 fly secrets set DATABASE_URL=… SESSION_SECRET=… ADMIN_EMAIL=… ADMIN_PASSWORD=… PROXY_SECRET=… ALLOWED_ORIGIN=https://<live site>
+# Brief assistant on Workers AI (or AI_PROVIDER=anthropic ANTHROPIC_API_KEY=…, or AI_PROVIDER=demo)
+fly secrets set AI_PROVIDER=workers-ai WORKERS_AI_ACCOUNT_ID=… WORKERS_AI_TOKEN=…
 fly deploy --ha=false
 ```
 The in-memory rate limiter is per machine; with more machines, move it to Redis.

@@ -5,7 +5,7 @@ import { defineConfig, devices } from "@playwright/test";
  *  - local (default): isolated ports + a throwaway in-memory PostgreSQL, so E2E never touches your data.
  *  - live: LIVE_URL=https://… LIVE_ADMIN_EMAIL=… LIVE_ADMIN_PASSWORD=… npx playwright test
  *    runs the desktop flows against the deployed site. Credentials come only from the environment.
- *    The assistant test expects DEMO MODE (no ANTHROPIC_API_KEY on the server).
+ *    The assistant test expects DEMO MODE on the server (AI_PROVIDER=demo); skip it with --grep-invert assistant otherwise.
  */
 const LIVE_URL = process.env.LIVE_URL?.replace(/\/$/, "");
 const API_PORT = 3100;
@@ -50,8 +50,10 @@ export default defineConfig({
         // Both device projects share one IP; limiter behaviour itself is covered by the API tests.
         RATE_LIMIT_FORM_MAX: "50",
         RATE_LIMIT_LOGIN_MAX: "50",
-        // Always demo mode: E2E must never call Anthropic, even if api/.env has a key.
+        // Always demo mode: E2E must never call an AI provider, even if api/.env has keys.
+        AI_PROVIDER: "demo",
         ANTHROPIC_API_KEY: "",
+        WORKERS_AI_TOKEN: "",
       },
     },
     {

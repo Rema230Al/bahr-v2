@@ -4,9 +4,9 @@ import { setup, validInquiry } from "./helpers";
 const answers = { lang: "en", idea: "A booking app for our clinic network", audience: "Patients in Jeddah", features: "Online booking" };
 
 describe("brief assistant", () => {
-  test("demo mode (no API key) returns a sample brief with the four sections and no prices", async () => {
+  test("demo mode (no provider configured) returns a sample brief with the four sections and no prices", async () => {
     const { call, config } = await setup();
-    expect(config.ai.apiKey).toBeNull();
+    expect(config.ai.provider).toBe("demo");
     const res = await call("POST", "/assistant/brief", { body: answers });
     expect(res.status).toBe(200);
     const { brief, demo } = (await res.json()) as { brief: string; demo: boolean };
@@ -36,7 +36,8 @@ describe("brief assistant", () => {
   });
 
   test("rate limited per IP, and by a global daily cap across all IPs", async () => {
-    const { call } = await setup({ ai: { apiKey: null, model: "x", timeoutMs: 1000, ipMax: 2, ipWindowMs: 60_000, dailyMax: 3 } });
+    const base = await setup();
+    const { call } = await setup({ ai: { ...base.config.ai, ipMax: 2, ipWindowMs: 60_000, dailyMax: 3 } });
     const ask = (ip: string) => call("POST", "/assistant/brief", { body: answers, ip });
     expect((await ask("1.1.1.1")).status).toBe(200);
     expect((await ask("1.1.1.1")).status).toBe(200);

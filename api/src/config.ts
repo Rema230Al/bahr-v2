@@ -1,3 +1,5 @@
+import type { AssistantOptions, Provider } from "./assistant";
+
 /** All runtime configuration comes from environment variables — nothing secret lives in code. */
 export type Config = {
   port: number;
@@ -17,9 +19,39 @@ export type Config = {
   /** IANA zone whose calendar days the admin date filter uses (e.g. "Asia/Riyadh"). */
   timeZone: string;
   rateLimit: { formMax: number; formWindowMs: number; loginMax: number; loginWindowMs: number };
-  /** Brief assistant. No API key = demo mode (sample briefs, no calls to Anthropic). */
-  ai: { apiKey: string | null; model: string; timeoutMs: number; ipMax: number; ipWindowMs: number; dailyMax: number };
+  /** Brief assistant: which provider writes the briefs, plus the limits every provider shares. */
+  ai: AssistantOptions & { ipMax: number; ipWindowMs: number; dailyMax: number };
 };
+
+const PROVIDERS: Provider[] = ["anthropic", "workers-ai", "demo"];
+/** Gemma 4 26B-A4B: ~4B active parameters, multilingual (Arabic included), cheap enough for the free tier. */
+export const DEFAULT_WORKERS_AI_MODEL = "@cf/google/gemma-4-26b-a4b-it";
+
+/**
+ * AI_PROVIDER picks the provider. Unset keeps the old behaviour (Anthropic with a key, otherwise demo).
+ * An explicit provider without its credentials fails at boot rather than silently going to demo.
+ */
+function aiProvider(env: Env) {
+  const raw = env.AI_PROVIDER?.trim().toLowerCase() || (env.ANTHROPIC_API_KEY?.trim() ? "anthropic" : "demo");
+  if (!PROVIDERS.includes(raw as Provider)) throw new Error(`AI_PROVIDER must be one of: ${PROVIDERS.join(", ")}`);
+  const provider = raw as Provider;
+  const anthropic = { apiKey: env.ANTHROPIC_API_KEY?.trim() || null, model: env.AI_MODEL?.trim() || "claude-opus-5-5" };
+  const workersAi = {
+    accountId: env.WORKERS_AI_ACCOUNT_ID?.trim() || null,
+    apiToken: env.WORKERS_AI_TOKEN?.trim() || null,
+    model: env.WORKERS_AI_MODEL?.trim() || DEFAULT_WORKERS_AI_MODEL,
+  };
+  if (provider === "anthropic" && !anthropic.apiKey) throw new Error("AI_PROVIDER=anthropic needs ANTHROPIC_API_KEY");
+  if (provider === "workers-ai") {
+    // The account id goes into the request URL: only a plain 32-hex Cloudflare id is accepted.
+    if (!workersAi.accountId || !/^[0-9a-f]{32}$/i.test(workersAi.accountId)) {
+      throw new Error("AI_PROVIDER=workers-ai needs WORKERS_AI_ACCOUNT_ID (your 32-character Cloudflare account id)");
+    }
+    if (!workersAi.apiToken) throw new Error("AI_PROVIDER=workers-ai needs WORKERS_AI_TOKEN (a Workers AI API token)");
+    if (!/^@(cf|hf)\/[\w.-]+\/[\w.-]+$/.test(workersAi.model)) throw new Error("WORKERS_AI_MODEL must look like @cf/vendor/model");
+  }
+  return { provider, anthropic, workersAi };
+}
 
 type Env = Record<string, string | undefined>;
 
@@ -76,8 +108,7 @@ export function loadConfig(env: Env = process.env): Config {
       loginWindowMs: int(env.RATE_LIMIT_LOGIN_WINDOW_MS, 15 * 60_000),
     },
     ai: {
-      apiKey: env.ANTHROPIC_API_KEY?.trim() || null,
-      model: env.AI_MODEL?.trim() || "claude-opus-5-5",
+      ...aiProvider(env),
       timeoutMs: int(env.AI_TIMEOUT_MS, 20_000),
       ipMax: int(env.RATE_LIMIT_AI_MAX, 5),
       ipWindowMs: int(env.RATE_LIMIT_AI_WINDOW_MS, 60 * 60_000),
