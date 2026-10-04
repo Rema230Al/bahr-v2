@@ -82,8 +82,8 @@ export default function Leads({ range, filters, admins }: { range: DateRange; fi
         </p>
       )}
 
-      {/* All five stages always fit the width: no sideways scrolling, nothing cut off. */}
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      {/* All five stages share the width equally (minmax(0, 1fr) tracks): nothing overflows into the next column. */}
+      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {STAGES.map(([key, label]) => (
           <Column
             key={key}
@@ -163,7 +163,8 @@ function Column({
           {compact(total)}
         </p>
       </header>
-      <ul className="grid gap-2">
+      {/* An explicit minmax(0, 1fr) track: an implicit `auto` one would grow to fit no-wrap text. */}
+      <ul className="grid min-w-0 grid-cols-1 gap-2">
         {leads.map((l) => (
           <Card key={l.id} lead={l} onMove={onMove} onOpen={onOpen} />
         ))}
@@ -176,14 +177,14 @@ function Card({ lead: l, onMove, onOpen }: { lead: Lead; onMove: (l: Lead, to: S
   const overdue = isOverdue(l);
   return (
     // Native HTML5 drag lives on the inner div: Framer Motion reserves onDragStart on motion.* for its own gestures.
-    <motion.li layout transition={{ duration: 0.3, ease: EASE }} data-testid="lead">
+    <motion.li layout transition={{ duration: 0.3, ease: EASE }} data-testid="lead" className="min-w-0">
       <div
         draggable
         onDragStart={(e) => {
           e.dataTransfer.setData("text/plain", String(l.id));
           e.dataTransfer.effectAllowed = "move";
         }}
-        className={`card relative cursor-grab p-3 transition-[border-color,box-shadow] duration-200 hover:shadow-[0_4px_14px_-6px_rgb(12_34_64/0.25)] active:cursor-grabbing ${
+        className={`card relative w-full min-w-0 cursor-grab p-3 transition-[border-color,box-shadow] duration-200 hover:shadow-[0_4px_14px_-6px_rgb(12_34_64/0.25)] active:cursor-grabbing ${
           overdue ? "!border-signal/60" : "hover:!border-ink/20"
         }`}
       >
@@ -203,7 +204,7 @@ function Card({ lead: l, onMove, onOpen }: { lead: Lead; onMove: (l: Lead, to: S
         </div>
         <div className="mt-3 flex items-center justify-between gap-2">
           <ServiceTag service={l.service} />
-          <span className={`truncate text-sm tabular-nums ${l.dealValue === null ? "text-muted" : "font-semibold"}`}>
+          <span className={`min-w-0 truncate text-sm tabular-nums ${l.dealValue === null ? "text-muted" : "font-semibold"}`}>
             {l.dealValue === null ? "No value" : sar(l.dealValue)}
           </span>
         </div>
