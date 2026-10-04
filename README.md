@@ -2,7 +2,6 @@
 
 A full-stack concept redesign of [bybahr.com](https://bybahr.com). Scrolling is a dive from the sea surface to the abyss, with each section at a different depth.
 
-**Live:** https://bahr-web.remasalsulami.workers.dev
 
 ## Features
 - **Cinematic dive journey:** GSAP ScrollTrigger, a 3D underwater scene (React Three Fiber), and a live depth counter
