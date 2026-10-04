@@ -91,6 +91,8 @@ describe("Workers AI provider", () => {
     expect(sent!.init.signal).toBeInstanceOf(AbortSignal);
     expect(sent!.body.model).toBe(DEFAULT_WORKERS_AI_MODEL);
     expect(sent!.body.max_tokens).toBe(1200);
+    // Thinking off: with it on, Gemma 4 spent the whole budget and ~28 s on reasoning (measured).
+    expect((sent!.body as unknown as { chat_template_kwargs: unknown }).chat_template_kwargs).toEqual({ enable_thinking: false });
 
     const [system, user] = sent!.body.messages;
     expect(system!.role).toBe("system");
@@ -106,6 +108,7 @@ describe("Workers AI provider", () => {
     const { fn, calls } = fakeFetch(() => completion(GOOD_BRIEF));
     await createAssistant(workersOptions(), fn).writeBrief({ ...answers, lang: "ar" });
     expect(calls[0]!.body.messages[0]!.content).toContain("خدمة بحر الأنسب");
+    expect(calls[0]!.body.messages[0]!.content).toContain("تطبيق جوال");
     expect(calls[0]!.body.messages[1]!.content).toContain("<language>Arabic</language>");
   });
 
