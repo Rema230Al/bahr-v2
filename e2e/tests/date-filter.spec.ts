@@ -62,7 +62,9 @@ test("the admin filters the dashboard by a date range", async ({ page }, testInf
   await expect(lead).toBeVisible();
 
   // The Stage dropdown hides it; removing that chip brings it back
-  await page.getByRole("combobox", { name: "Stage", exact: true }).selectOption("won");
+  await page.getByRole("button", { name: "Stage", exact: true }).click();
+  await page.getByRole("menu", { name: "Stage" }).getByRole("menuitemradio", { name: "Won" }).click();
+  await expect(page.getByRole("menu")).toHaveCount(0);
   await expect(chips).toContainText("Stage: Won");
   await expect(lead).toHaveCount(0);
   await chips.getByRole("button", { name: "Remove filter Stage: Won" }).click();

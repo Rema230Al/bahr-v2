@@ -117,7 +117,10 @@ for (const vp of VIEWPORTS) {
       await settle(page, 400);
       await page.screenshot({ path: `screens/${vp.name}-admin-date-menu.png` });
       await page.getByRole("dialog", { name: "Date range" }).getByRole("button", { name: "Last 30 days" }).click();
-      await page.getByRole("combobox", { name: "Service", exact: true }).selectOption("ai");
+      await page.getByRole("button", { name: "Service", exact: true }).click();
+      await settle(page, 400);
+      await page.screenshot({ path: `screens/${vp.name}-admin-service-menu.png` });
+      await page.getByRole("menu", { name: "Service" }).getByRole("menuitemradio", { name: "AI" }).click();
       await settle(page, 600);
       await page.screenshot({ path: `screens/${vp.name}-admin-leads-filtered.png` });
       await page.getByRole("button", { name: "Clear all" }).click();

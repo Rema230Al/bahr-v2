@@ -158,7 +158,45 @@ export default function FilterBar({
   );
 }
 
-/** A native <select> laid invisibly over a button-looking label: compact, but still a real, accessible select. */
+const POPOVER = "card absolute start-0 top-full z-30 mt-2 p-1.5 shadow-[0_12px_32px_-12px_rgb(12_34_64/0.3)]";
+const POP_MOTION = {
+  initial: { opacity: 0, y: -6 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -6 },
+  transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] as const },
+};
+
+const Check = () => (
+  <svg aria-hidden="true" viewBox="0 0 12 12" className="h-3 w-3 flex-none">
+    <path d="m2.5 6.5 2.5 2.5 4.5-6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+/** Open state for a popover: closes on a click outside or Escape (focus goes back to its button). */
+function usePopover() {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!root.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      root.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    };
+    document.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  return { open, setOpen, root };
+}
+
+/** A small dropdown button with a styled menu of options (arrow keys move, Enter picks). */
 function SelectPill({
   label,
   any,
@@ -174,55 +212,85 @@ function SelectPill({
   display?: (value: string, label: string) => string;
   onChange: (v: string) => void;
 }) {
+  const { open, setOpen, root } = usePopover();
+  const menu = useRef<HTMLDivElement>(null);
   const current = options.find(([v]) => v === value);
   const active = value !== "all" && current;
+  const items: [string, string][] = [["all", any], ...options];
+
+  // On open, focus the chosen option so arrow keys start from there.
+  useEffect(() => {
+    if (open) menu.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus();
+  }, [open]);
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const all = [...(menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ?? [])];
+    const i = all.indexOf(document.activeElement as HTMLButtonElement);
+    const to = e.key === "ArrowDown" ? i + 1 : e.key === "ArrowUp" ? i - 1 : e.key === "Home" ? 0 : e.key === "End" ? all.length - 1 : null;
+    if (to === null) return;
+    e.preventDefault();
+    all[(to + all.length) % all.length]?.focus();
+  };
+
+  const pick = (v: string) => {
+    onChange(v);
+    setOpen(false);
+    root.current?.querySelector<HTMLButtonElement>("button")?.focus();
+  };
+
   return (
-    <span
-      className={`${PILL} relative outline-offset-2 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent ${
-        active ? "border-accent/40 text-accent" : "border-line"
-      }`}
-    >
-      <span>
-        {label}
-        {active && <span className="font-medium">: {display ? display(current[0], current[1]) : current[1]}</span>}
-      </span>
-      <Chevron />
-      <select
-        aria-label={label}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="absolute inset-0 cursor-pointer appearance-none opacity-0"
+    <div ref={root} className="relative">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" && !open) {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }}
+        className={`${PILL} ${active ? "border-accent/40 text-accent" : "border-line"}`}
       >
-        <option value="all">{any}</option>
-        {options.map(([v, l]) => (
-          <option key={v} value={v}>
-            {l}
-          </option>
-        ))}
-      </select>
-    </span>
+        <span>
+          {label}
+          {active && <span className="font-medium">: {display ? display(current[0], current[1]) : current[1]}</span>}
+        </span>
+        <Chevron className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div ref={menu} role="menu" aria-label={label} onKeyDown={onKeyDown} {...POP_MOTION} className={`${POPOVER} w-max min-w-44 max-w-[min(18rem,calc(100vw-2rem))]`}>
+            {items.map(([v, l], i) => (
+              <div key={v}>
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={value === v}
+                  onClick={() => pick(v)}
+                  className={`flex w-full items-center justify-between gap-4 rounded-md px-2.5 py-1.5 text-start text-sm outline-offset-0 hover:bg-ink/[0.05] focus-visible:bg-ink/[0.05] ${
+                    value === v ? "font-medium text-accent" : v === "all" ? "text-muted" : ""
+                  }`}
+                >
+                  <span className="truncate">{l}</span>
+                  {value === v && <Check />}
+                </button>
+                {i === 0 && <div className="my-1 border-t border-line" role="separator" />}
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
 function DateMenu({ label, value, onChange }: { label: string; value: RangeState; onChange: (r: RangeState) => void }) {
-  const [open, setOpen] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
+  const { open, setOpen, root } = usePopover();
   const invalid = !isValidRange(value);
   const active = !!(value.from || value.to) && !invalid;
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: PointerEvent) => {
-      if (!root.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("pointerdown", onDown);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onDown);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
 
   const pick = (p: Preset) => {
     onChange(presetRange(p, value));
@@ -245,20 +313,12 @@ function DateMenu({ label, value, onChange }: { label: string; value: RangeState
         <span>
           {label}: <span className="font-medium">{rangeText(value)}</span>
         </span>
-        <Chevron />
+        <Chevron className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
       </button>
 
       <AnimatePresence>
         {open && (
-          <motion.div
-            role="dialog"
-            aria-label="Date range"
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className="card absolute start-0 top-full z-30 mt-2 w-[min(20rem,calc(100vw-2rem))] p-2 shadow-[0_12px_32px_-12px_rgb(12_34_64/0.3)]"
-          >
+          <motion.div role="dialog" aria-label="Date range" {...POP_MOTION} className={`${POPOVER} w-[min(20rem,calc(100vw-2rem))]`}>
             <ul className="grid gap-0.5" aria-label="Presets">
               {PRESETS.map(([p, name]) => (
                 <li key={p}>
@@ -271,11 +331,7 @@ function DateMenu({ label, value, onChange }: { label: string; value: RangeState
                     }`}
                   >
                     {name}
-                    {value.preset === p && (
-                      <svg aria-hidden="true" viewBox="0 0 12 12" className="h-3 w-3">
-                        <path d="m2.5 6.5 2.5 2.5 4.5-6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    )}
+                    {value.preset === p && <Check />}
                   </button>
                 </li>
               ))}
